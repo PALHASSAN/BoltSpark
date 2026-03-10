@@ -1,6 +1,10 @@
 import Foundation
 import GRDB
 
+@attached(member, names: named(create), named(update), named(init))
+@attached(extension, conformances: Model)
+public macro Model() = #externalMacro(module: "BoltSparkMacros", type: "ModelMacro")
+
 public enum BoltSpark {
     /// A lock to ensure thread-safe access to the database (Swift 6 safety)
     private static let lock = NSLock()

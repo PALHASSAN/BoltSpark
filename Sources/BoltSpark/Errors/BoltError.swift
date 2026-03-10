@@ -7,4 +7,5 @@
 
 public enum BoltError: Error {
     case modelNotFound(String)
+    case databaseError(String)
 }

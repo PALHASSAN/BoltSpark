@@ -5,10 +5,14 @@
 //  Created by Alhassan AlMakki on 21/09/1447 AH.
 //
 
+import Foundation
 import GRDB
 
-public protocol Model: FetchableRecord, PersistableRecord, Codable {
+public protocol Model: FetchableRecord, MutablePersistableRecord, Codable {
     static var tableName: String { get }
+    
+    static var guarded: [String] { get }
+    var id: Int64? { get set }
 }
 
 extension Model {
@@ -18,6 +22,37 @@ extension Model {
     
     public static func query() -> QueryBuilder<Self> {
         return QueryBuilder(request: Self.all())
+    }
+    
+    public static var guarded: [String] {
+        return ["id"]
+    }
+    
+    @discardableResult
+    public mutating func create() throws -> Self {
+        try BoltSpark.db.write { db in
+            try self.insert(db)
+        }
+        return self
+    }
+    
+    public mutating func update() throws -> Self {
+        try BoltSpark.db.write { db in
+            try self.update(db)
+        }
+        return self
+    }
+    
+    public mutating func save() throws {
+        try BoltSpark.db.write { db in
+            try self.save(db)
+        }
+    }
+            
+    public mutating func delete() throws {
+        try BoltSpark.db.write { db in
+            _ = try self.delete(db)
+        }
     }
     
     public static func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { query().where(column, value) }
