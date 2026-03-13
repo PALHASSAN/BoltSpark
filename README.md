@@ -1,4 +1,4 @@
-[![Swift Version](https://img.shields.io/badge/swift-5.9-orange.svg)](https://swift.org)
+[![Swift Version](https://img.shields.io/badge/swift-6-orange.svg)](https://swift.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Build](https://img.shields.io/github/workflow/status/PALHASSAN/BoltSpark/Build)](https://github.com/PALHASSAN/BoltSpark/actions)
 [![Stars](https://img.shields.io/github/stars/PALHASSAN/BoltSpark?style=social)](https://github.com/PALHASSAN/BoltSpark/stargazers)
