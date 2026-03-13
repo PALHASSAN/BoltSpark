@@ -1,56 +1,21 @@
+
 # BoltSpark
-
-BoltSpark is an elegant, macro-driven ORM for Swift that brings a Laravel-inspired developer experience to database management. It streamlines schema definition, relationship mapping, and data querying with an expressive, type-safe API.
-
----
-
-## Table of Contents
-
-* [Features](https://www.google.com/search?q=%23features)
-* [Installation](https://www.google.com/search?q=%23installation)
-* [Quick Start](https://www.google.com/search?q=%23quick-start)
-* [Direct Querying](https://www.google.com/search?q=%23direct-querying)
-* [Relationships](https://www.google.com/search?q=%23relationships)
-* [Example: @HasMany](https://www.google.com/search?q=%23example-hasmany)
-
-
-* [Querying Relationships](https://www.google.com/search?q=%23querying-relationships)
-* [Supported Relationships](https://www.google.com/search?q=%23supported-relationships)
-* [Usage Examples](https://www.google.com/search?q=%23usage-examples)
-* [Pagination](https://www.google.com/search?q=%23pagination)
-* [Soft Deletes & Timestamps](https://www.google.com/search?q=%23soft-deletes--timestamps)
-* [Best Practices](https://www.google.com/search?q=%23best-practices)
-* [Notes](https://www.google.com/search?q=%23notes)
-* [Contributing](https://www.google.com/search?q=%23contributing)
-* [License](https://www.google.com/search?q=%23license)
+BoltSpark is an elegant, macro-driven ORM for Swift that brings a Laravel-inspired developer experience to database management. It streamlines schema definition, relationship mapping, and data querying with an expressive, type-safe API that eliminates unnecessary boilerplate.
 
 ---
 
 ## Features
-
-* **Direct Model Querying**: Initiate queries directly from your model classes using static methods like `.where()`, `.find()`, and `.all()`.
-* **Macro-Powered Models**: Use the `@Model` macro to inject database logic and relationship accessors with minimal boilerplate.
-* **Advanced Relationship Filtering**: Filter records based on the existence or properties of related data using `has` and `whereHas`.
-* **Fluent Query Builder**: Construct complex SQL queries through a human-readable, chainable interface.
-* **Integrated Pagination**: Easily split large datasets into manageable pages with the built-in `Paginator`.
-* **Real-time Validation**: Seamlessly connects with `LiveValidate` for automatic, declarative data validation.
-
----
-
-## Installation
-
-Add BoltSpark to your project via Swift Package Manager:
-
-```bash
-swift-package add BoltSpark
-
-```
+* **Direct Model Querying**: Execute database operations directly from your models using static methods like `.where()`, `.find()`, and `.get()`.
+* **Declarative Validation**: Real-time data validation integrated directly into models via `@Validate`.
+* **Macro-Powered Relationships**: Define complex data connections using property wrappers that generate safe accessors automatically.
+* **Fluent Schema Builder**: Programmatically define your database structure with a clean, readable Blueprint API.
+* **Advanced Querying**: Support for eager loading, relationship existence checks (`has`), and constrained relationship filtering (`whereHas`).
+* **Lifecycle Management**: Built-in support for automatic Timestamps and Soft Deletes.
 
 ---
 
 ## Quick Start
-
-Define a model and interact with your database using natural syntax:
+Define a model and start querying your data immediately:
 
 ```swift
 import BoltSpark
@@ -62,31 +27,49 @@ struct User: Timestamps {
     var email: String = ""
 }
 
-// Perform queries directly
-let users = try User.where("name", "Alhassan").get()
+// Perform queries directly without calling .query()
+let users = try User.where("active", 1).orderBy("name").get()
 
 ```
 
 ---
 
 ## Direct Querying
+BoltSpark turns your models into powerful gateways for data interaction. You no longer need to manually initialize a query builder; simply call the static methods on the model itself.
 
-BoltSpark eliminates the need for manual builder initialization. Every model acts as a gateway to the `QueryBuilder`.
+* **Retrieval**: `User.all()`, `User.first()`, or `User.find(id)`.
+* **Filtering**: `User.where("role", "admin")` or `User.whereIn("id", [1, 2, 3])`.
+* **Aggregates**: `User.count()` or `User.exists()`.
+* **Ordering & Limits**: `User.orderBy("created_at", desc: true).limit(10)`.
 
-* **Filtering**: `User.where("active", 1)`
-* **Ordering**: `User.orderBy("created_at", desc: true)`
-* **Retrieving**: `User.all()` or `User.get()`
-* **Finding**: `User.find(5)`
+---
+
+## Validation
+BoltSpark integrates seamlessly with `LiveValidate` to provide real-time, declarative validation for your model properties.
+
+```swift
+@Model
+struct User: Timestamps {
+    var id: Int64?
+    
+    @Validate(.name("Full Name"), .required(), .min(3))
+    var name: String = ""
+    
+    @Validate(.required(), .email(), .unique(table: "users", column: "email"))
+    var email: String = ""
+}
+
+```
+
+The `@Validate` macro ensures that your data conforms to your rules before it ever hits the database. Error messages are handled automatically and can be bound directly to your SwiftUI views.
 
 ---
 
 ## Relationships
+BoltSpark supports a comprehensive suite of relationship types to define how your data connects.
 
-BoltSpark supports robust model relationships to define connections between data entities effortlessly.
-
-### Example: @HasMany
-
-The `@HasMany` macro defines a one-to-many relationship.
+### Example: One-to-Many (@HasMany)
+Define a relationship where one model owns multiple children.
 
 ```swift
 @Model
@@ -107,137 +90,143 @@ struct Project: Timestamps {
 
 ```
 
-BoltSpark automatically manages the foreign key mapping (e.g., `user_id`) based on model names.
+Access related records through a simple property call: `try user.projects`. BoltSpark automatically infers the foreign key based on the parent model's name.
 
 ---
 
-## Querying Relationships
+## Supported Relationship Types
+| Relationship | Description | Example |
+| --- | --- | --- |
+| **@HasOne** | A direct one-to-one connection. | `@HasOne(Profile.self)` |
+| **@HasMany** | A one-to-many connection. | `@HasMany(Project.self)` |
+| **@BelongsTo** | The inverse of a HasOne/HasMany. | `@BelongsTo(User.self)` |
+| **@BelongsToMany** | Many-to-many via a pivot table. | `@BelongsToMany(Role.self, through: "user_roles")` |
+| **@HasManyThrough** | Distant relations via an intermediate model. | `@HasManyThrough(Task.self, through: Project.self)` |
+| **@HasOneThrough** | One-to-one via an intermediate model. | `@HasOneThrough(Owner.self, through: Project.self)` |
+| **@MorphMany** | Polymorphic one-to-many connection. | `@MorphMany(Comment.self, name: "model")` |
+| **@MorphOne** | Polymorphic one-to-one connection. | `@MorphOne(Image.self, name: "model")` |
+| **@MorphTo** | Inverse polymorphic connection. | `@MorphTo(Target.self, name: "model")` |
 
-Optimize performance and filter results based on related data:
+---
 
-* **Eager Loading**: Load relationships upfront to avoid N+1 issues using `.with()`.
+## Advanced Relationship Querying
+Leverage related data to refine your searches and optimize performance.
+
+* **Eager Loading**: Load related models in a single batch to avoid N+1 query issues using `.with()`.
 ```swift
-let users = try User.with("projects").get()
+let users = try User.with("projects", "roles").get()
 
 ```
 
-
-* **Relationship Existence**: Filter records that have at least one related entry.
+* **Existence Checks**: Filter parent models that have (or don't have) specific related records.
 ```swift
-let usersWithProjects = try User.has("projects").get()
+let activeUsers = try User.has("projects").get()
+let idleUsers = try User.doesntHave("projects").get()
 
 ```
 
-
-* **Constrained Filtering**: Filter records based on specific conditions in the relationship.
+* **Constrained Filtering**: Filter parents based on properties of their children.
 ```swift
-let busyUsers = try User.whereHas("projects") { query in
-    query.where("budget", ">", 10000)
+let bigSpenders = try User.whereHas("projects") { query in
+    query.where("budget", ">", 50000)
 }.get()
 
 ```
 
-
-
 ---
 
-## Supported Relationships
+## Full Integrated Example
 
-| Relationship | Description | Example |
-| --- | --- | --- |
-| **@HasOne** | One-to-one connection. | `@HasOne(Profile.self)` |
-| **@HasMany** | One-to-many connection. | `@HasMany(Post.self)` |
-| **@BelongsTo** | Inverse of a relationship. | `@BelongsTo(User.self)` |
-| **@BelongsToMany** | Many-to-many via a pivot table. | `@BelongsToMany(Role.self, through: "pivot")` |
-| **@MorphMany** | Polymorphic one-to-many. | `@MorphMany(Comment.self, name: "model")` |
-
----
-
-## Usage Examples
-
-### CRUD Operations
-
-**Creating Records**
+### 1. Schema Migration
 
 ```swift
-// Standard Call
-User.create(name: "Alhassan", email: "al@bolt.com")
+try Schema.create("users") { table in
+    table.id()
+    table.string("name")
+    table.string("email").unique()
+    table.timestamps()
+}
 
-// Safe / Throwable Call
-try User.create(name: "Alhassan AlMakki", email: "alhassan@example.com")
+try Schema.create("projects") { table in
+    table.id()
+    table.foreignId("user_id", references: "users")
+    table.string("title")
+    table.double("budget").defaults(to: 0.0)
+    table.timestamps()
+    table.softDelete()
+}
 
 ```
 
-**Updating Records**
+### 2. Implementation
 
 ```swift
-if var user = try User.find(1) {
-    user.name = "Updated Name"
-    try user.update()
+@Model
+struct User: Timestamps {
+    var id: Int64?
+    var name: String = ""
+    @Validate(.required(), .email())
+    var email: String = ""
+    
+    @HasMany(Project.self)
+    var projects: [Project]
+}
+
+@Model
+struct Project: Timestamps, SoftDeletable {
+    var id: Int64?
+    var user_id: Int64
+    var title: String = ""
+    var budget: Double = 0.0
+}
+
+```
+
+### 3. Usage
+
+```swift
+func handleData() async throws {
+    // Direct Creation
+    let user = try User.create(name: "Alhassan", email: "al@bolt.com")
+    
+    // Direct Querying with Eager Loading & Pagination
+    let pagedData = try User.where("name", "Alhassan")
+                           .with("projects")
+                           .paginate(page: 1, perPage: 15)
+    
+    // Soft Deletion
+    if let project = try Project.find(1) {
+        try project.delete()
+        let trashed = try Project.onlyTrashed().get()
+        try project.restore()
+    }
 }
 
 ```
 
 ---
 
-## Pagination
-
-Retrieve data in chunks to improve application performance:
-
-```swift
-let paginatedUsers = try User.where("active", 1).paginate(page: 1, perPage: 15)
-
-print(paginatedUsers.total)        // Total records in DB
-print(paginatedUsers.hasMorePages) // Boolean check
-
-```
-
----
-
-## Soft Deletes & Timestamps
-
-BoltSpark includes built-in support for tracking record lifecycles.
-
-* **Timestamps**: Automatically manages `created_at` and `updated_at`.
-* **Soft Deletes**: Records are flagged with `deleted_at` rather than removed from the database.
-```swift
-// Include deleted items in query
-let allUsers = try User.withTrashed().get()
-
-// Restore a deleted item
-try user.restore()
-
-```
-
-
-
----
-
 ## Best Practices
-
-* **Favor Direct Access**: Use static methods like `User.where()` for cleaner code; avoid manual `query()` calls unless necessary.
-* **Eager Load Aggressively**: Always use `.with()` for related properties you plan to display in UI to optimize database roundtrips.
-* **Adopt Timestamps**: Use the `Timestamps` protocol for all primary models to maintain a reliable audit trail.
-* **Type-Safe Inlines**: Use `.self` in relationship definitions to enable compile-time type checking.
+* **Direct Access**: Favor static model methods (e.g., `User.where()`) over manual builder calls for cleaner, more readable code.
+* **Batch Loading**: Always use `.with()` when you know related data will be accessed to maintain high performance.
+* **Standardize Naming**: Stick to standard plural table names to allow BoltSpark to automatically infer relationship keys.
+* **Protocol Adoption**: Ensure your structs adopt `Timestamps` or `SoftDeletable` to unlock automatic lifecycle management.
 
 ---
 
 ## Notes
+> **Note**
+> BoltSpark utilizes `DatabasePool` for auto-initialization, ensuring thread-safe, high-performance concurrent reads across your application.
 
 > **Note**
-> BoltSpark automatically handles database initialization and connection pooling. It uses `DatabasePool` to ensure high-performance concurrent reads.
-
-> **Note**
-> Relationship accessors are generated as `throwing` properties. Always use `try` when accessing properties like `user.projects`.
+> Relationship properties are generated as throwing accessors. Always wrap relationship access in `try` to handle potential database fetch errors gracefully.
 
 ---
 
 ## Contributing
-
-We welcome contributions! Please submit a pull request or open an issue to suggest improvements or report bugs.
+Contributions are welcome! Please submit a pull request or open an issue to suggest improvements or report bugs.
 
 ---
 
 ## License
-
 MIT License. Copyright (c) 2026 Alhassan AlMakki.
