@@ -1,14 +1,27 @@
+[![Swift Version](https://img.shields.io/badge/swift-5.9-orange.svg)](https://swift.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Build](https://img.shields.io/github/workflow/status/PALHASSAN/BoltSpark/Build)](https://github.com/PALHASSAN/BoltSpark/actions)
+[![Stars](https://img.shields.io/github/stars/PALHASSAN/BoltSpark?style=social)](https://github.com/PALHASSAN/BoltSpark/stargazers)
 
 # ⚡ BoltSpark
 BoltSpark is an elegant, macro-driven ORM for Swift that brings a Laravel-inspired developer experience to database management. It streamlines schema definition, relationship mapping, and data querying with an expressive, type-safe API that eliminates unnecessary boilerplate.
 
 ## ✨ Features
+* **Built-in Validation**: Integrated with LiveValidate for declarative model validation.
 * **Direct Model Querying**: Execute database operations directly from your models using static methods like `.where()`, `.find()`, and `.get()`.
 * **Declarative Validation**: Real-time data validation integrated directly into models via `@Validate`.
 * **Macro-Powered Relationships**: Define complex data connections using property wrappers that generate safe accessors automatically.
 * **Fluent Schema Builder**: Programmatically define your database structure with a clean, readable Blueprint API.
 * **Advanced Querying**: Support for eager loading, relationship existence checks (`has`), and constrained relationship filtering (`whereHas`).
 * **Lifecycle Management**: Built-in support for automatic Timestamps and Soft Deletes.
+
+## 🧩 Built-in Validation (LiveValidate)
+BoltSpark ships with built-in integration with **LiveValidate**, a powerful validation library that provides declarative, real-time validation for Swift models.
+
+This means you can define validation rules directly on your model properties using the `@Validate` without needing additional setup.
+
+🔗 **LiveValidate Repository**
+https://github.com/PALHASSAN/LiveValidate
 
 ### 📦 Installation
 Add the package to your project via **Swift Package Manager (SPM)**:
@@ -61,8 +74,8 @@ struct User: Timestamps {
 
 ```
 
-The `@Validate` macro ensures that your data conforms to your rules before it ever hits the database. Error messages are handled automatically and can be bound directly to your SwiftUI views.
-
+> [!NOTE]
+> LiveValidate is included by default; no extra setup required.
 
 ## 🔗 Relationships
 BoltSpark supports a comprehensive suite of relationship types to define how your data connects.
