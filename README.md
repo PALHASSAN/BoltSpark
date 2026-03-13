@@ -1,10 +1,8 @@
 
-# BoltSpark
+# ⚡ BoltSpark
 BoltSpark is an elegant, macro-driven ORM for Swift that brings a Laravel-inspired developer experience to database management. It streamlines schema definition, relationship mapping, and data querying with an expressive, type-safe API that eliminates unnecessary boilerplate.
 
----
-
-## Features
+## ✨ Features
 * **Direct Model Querying**: Execute database operations directly from your models using static methods like `.where()`, `.find()`, and `.get()`.
 * **Declarative Validation**: Real-time data validation integrated directly into models via `@Validate`.
 * **Macro-Powered Relationships**: Define complex data connections using property wrappers that generate safe accessors automatically.
@@ -12,9 +10,15 @@ BoltSpark is an elegant, macro-driven ORM for Swift that brings a Laravel-inspir
 * **Advanced Querying**: Support for eager loading, relationship existence checks (`has`), and constrained relationship filtering (`whereHas`).
 * **Lifecycle Management**: Built-in support for automatic Timestamps and Soft Deletes.
 
----
+### 📦 Installation
+Add the package to your project via **Swift Package Manager (SPM)**:
+In Xcode: `File > Add Package Dependencies...` and enter this URL in the search bar:
 
-## Quick Start
+```
+https://github.com/PALHASSAN/BoltSpark.git
+```
+
+## 🚀 Quick Start
 Define a model and start querying your data immediately:
 
 ```swift
@@ -32,9 +36,7 @@ let users = try User.where("active", 1).orderBy("name").get()
 
 ```
 
----
-
-## Direct Querying
+## 🔎 Direct Querying
 BoltSpark turns your models into powerful gateways for data interaction. You no longer need to manually initialize a query builder; simply call the static methods on the model itself.
 
 * **Retrieval**: `User.all()`, `User.first()`, or `User.find(id)`.
@@ -42,9 +44,7 @@ BoltSpark turns your models into powerful gateways for data interaction. You no 
 * **Aggregates**: `User.count()` or `User.exists()`.
 * **Ordering & Limits**: `User.orderBy("created_at", desc: true).limit(10)`.
 
----
-
-## Validation
+## ✅ Validation
 BoltSpark integrates seamlessly with `LiveValidate` to provide real-time, declarative validation for your model properties.
 
 ```swift
@@ -63,9 +63,8 @@ struct User: Timestamps {
 
 The `@Validate` macro ensures that your data conforms to your rules before it ever hits the database. Error messages are handled automatically and can be bound directly to your SwiftUI views.
 
----
 
-## Relationships
+## 🔗 Relationships
 BoltSpark supports a comprehensive suite of relationship types to define how your data connects.
 
 ### Example: One-to-Many (@HasMany)
@@ -92,9 +91,7 @@ struct Project: Timestamps {
 
 Access related records through a simple property call: `try user.projects`. BoltSpark automatically infers the foreign key based on the parent model's name.
 
----
-
-## Supported Relationship Types
+## 🛠 Supported Relationship Types
 | Relationship | Description | Example |
 | --- | --- | --- |
 | **@HasOne** | A direct one-to-one connection. | `@HasOne(Profile.self)` |
@@ -107,9 +104,7 @@ Access related records through a simple property call: `try user.projects`. Bolt
 | **@MorphOne** | Polymorphic one-to-one connection. | `@MorphOne(Image.self, name: "model")` |
 | **@MorphTo** | Inverse polymorphic connection. | `@MorphTo(Target.self, name: "model")` |
 
----
-
-## Advanced Relationship Querying
+## ⚙️ Advanced Relationship Querying
 Leverage related data to refine your searches and optimize performance.
 
 * **Eager Loading**: Load related models in a single batch to avoid N+1 query issues using `.with()`.
@@ -133,9 +128,7 @@ let bigSpenders = try User.whereHas("projects") { query in
 
 ```
 
----
-
-## Full Integrated Example
+## 🧩 Full Integrated Example
 
 ### 1. Schema Migration
 
@@ -204,29 +197,21 @@ func handleData() async throws {
 
 ```
 
----
-
-## Best Practices
+## 🧠 Best Practices
 * **Direct Access**: Favor static model methods (e.g., `User.where()`) over manual builder calls for cleaner, more readable code.
 * **Batch Loading**: Always use `.with()` when you know related data will be accessed to maintain high performance.
 * **Standardize Naming**: Stick to standard plural table names to allow BoltSpark to automatically infer relationship keys.
 * **Protocol Adoption**: Ensure your structs adopt `Timestamps` or `SoftDeletable` to unlock automatic lifecycle management.
 
----
-
-## Notes
-> **Note**
+## 📝 Notes
+> [!NOTE]
 > BoltSpark utilizes `DatabasePool` for auto-initialization, ensuring thread-safe, high-performance concurrent reads across your application.
 
-> **Note**
+> [!NOTE]
 > Relationship properties are generated as throwing accessors. Always wrap relationship access in `try` to handle potential database fetch errors gracefully.
 
----
-
-## Contributing
+## 🤝 Contributing
 Contributions are welcome! Please submit a pull request or open an issue to suggest improvements or report bugs.
 
----
-
-## License
+## 📄 License
 MIT License. Copyright (c) 2026 Alhassan AlMakki.
