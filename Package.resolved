@@ -1,5 +1,5 @@
 {
-  "originHash" : "867e2ce7fc1df93bd0e480766e412ad77e19892109ed98f88ee4b7dc9b72f53e",
+  "originHash" : "eef020439e2872c182cacf893b015deddfaed468bab05f2ae3cc0272fb98085e",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "2cf6c756e1e5ef6901ebae16576a7e4e4b834622",
         "version" : "6.29.3"
+      }
+    },
+    {
+      "identity" : "livevalidate",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/PALHASSAN/LiveValidate.git",
+      "state" : {
+        "revision" : "21309e8a8ea53e04533f6450c3efae244cd07201",
+        "version" : "0.2.3"
       }
     },
     {

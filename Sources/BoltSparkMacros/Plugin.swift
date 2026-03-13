@@ -11,6 +11,7 @@ import SwiftSyntaxMacros
 @main
 struct BoltSparkPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
-        ModelMacro.self
+        ModelMacro.self,
+        RelationshipMacro.self
     ]
 }

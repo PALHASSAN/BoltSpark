@@ -6,25 +6,47 @@
 //
 
 import GRDB
+import Foundation
 
-public struct QueryBuilder<T: Model> {
+public class QueryBuilder<T: Model> {
     private var request: QueryInterfaceRequest<T>
+    var assembledCondition: SQLExpression?
     
-    private var assembledCondition: SQLExpression?
+    private var _withTrashed: Bool = false
+    private var _onlyTrashed: Bool = false
     
     private func buildRequest() -> QueryInterfaceRequest<T> {
+        var finalRequest = request
+        
         if let finalCondition = self.assembledCondition {
-            return request.filter(finalCondition)
+            finalRequest = finalRequest.filter(finalCondition)
         }
-        return request
+        
+        if T.isSoftDeletable {
+            if _onlyTrashed {
+                finalRequest = finalRequest.filter(Column("deleted_at") != nil)
+            } else if !_withTrashed {
+                finalRequest = finalRequest.filter(Column("deleted_at") == nil)
+            }
+        }
+        
+        return finalRequest
     }
     
     init(request: QueryInterfaceRequest<T>) {
         self.request = request
     }
     
+    public func _whereRaw(_ sql: String, arguments: StatementArguments = []) -> Self {
+        let builder = self
+        let newCondition = sql.sqlExpression
+        
+        builder.assembledCondition = builder.assembledCondition.map { $0 && newCondition } ?? newCondition
+        return builder
+    }
+    
     public func `where`(_ column: String, _ operator: String, _ value: some DatabaseValueConvertible) -> Self {
-        var builder = self
+        let builder = self
         let col = Column(column)
         let newCondition: SQLExpression
         
@@ -43,14 +65,14 @@ public struct QueryBuilder<T: Model> {
     }
     
     // By defalut is =
-    /// User.query().where("active", 1)
+    /// User.where("active", 1)
     public func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> Self {
         return self.where(column, "=", value)
     }
     
-    /// User.query().whereIn("id", [1, 2, 3])
+    /// User.whereIn("id", [1, 2, 3])
     public func whereIn(_ column: String, _ values: [some DatabaseValueConvertible]) -> Self {
-        var builder = self
+        let builder = self
         let newExpr = values.contains(Column(column))
         builder.assembledCondition = builder.assembledCondition.map { $0 && newExpr } ?? newExpr
         return builder
@@ -58,7 +80,7 @@ public struct QueryBuilder<T: Model> {
     
     /// User.whereNull("deleted_at")
     public func whereNull(_ column: String) -> Self {
-        var builder = self
+        let builder = self
         let newCondition = (Column(column) == nil)
         builder.assembledCondition = builder.assembledCondition.map { $0 && newCondition } ?? newCondition
         return builder
@@ -66,7 +88,7 @@ public struct QueryBuilder<T: Model> {
     
     /// User.whereNotNull("deleted_at")
     public func whereNotNull(_ column: String) -> Self {
-        var builder = self
+        let builder = self
         let newCondition = (Column(column) != nil)
         builder.assembledCondition = builder.assembledCondition.map { $0 && newCondition } ?? newCondition
         return builder
@@ -74,7 +96,7 @@ public struct QueryBuilder<T: Model> {
     
     /// User.where("active", 1).orWhere("role", "admin")
     public func orWhere(_ column: String, _ value: some DatabaseValueConvertible) -> Self {
-        var builder = self
+        let builder = self
         let newCondition = (Column(column) == value)
         
         builder.assembledCondition = builder.assembledCondition.map { $0 || newCondition } ?? newCondition
@@ -83,14 +105,14 @@ public struct QueryBuilder<T: Model> {
     
     /// User.select(["id", "name"])
     public func select(_ columns: [String]) -> Self {
-        var builder = self
+        let builder = self
         builder.request = request.select(columns.map { Column($0) })
         return builder
     }
     
     public func find(_ id: some DatabaseValueConvertible) throws -> T? {
         return try BoltSpark.db.read { db in
-            try T.filter(key: id).fetchOne(db)
+            try buildRequest().filter(key: id).fetchOne(db)
         }
     }
     
@@ -120,26 +142,27 @@ public struct QueryBuilder<T: Model> {
     
     /// orderBy("created_at", desc: true)
     public func orderBy(_ column: String, desc: Bool = false) -> Self {
-        var builder = self
+        let builder = self
         let order = desc ? Column(column).desc : Column(column).asc
         builder.request = request.order(order)
         return builder
     }
     
-    public func with<Child: Model>(_ association: HasManyAssociation<T, Child>) -> Self {
-        var builder = self
-        builder.request = request.including(all: association)
-        return builder
+    /// e.g. User.with(["projects", "profile"])
+    public func with(_ relations: [String]) -> Self {
+        self.request = relations.reduce(self.request) { currentRequest, relation in
+            T.applyRelation(relation, to: currentRequest)
+        }
+        return self
     }
     
-    public func with<Parent: Model>(_ association: BelongsToAssociation<T, Parent>) -> Self {
-        var builder = self
-        builder.request = request.including(optional: association)
-        return builder
+    /// e.g. User.with("projects", "profile")
+    public func with(_ relations: String...) -> Self {
+        return self.with(relations)
     }
     
     public func limit(_ limit: Int, offset: Int? = nil) -> Self {
-        var builder = self
+        let builder = self
         builder.request = request.limit(limit, offset: offset)
         return builder
     }
@@ -152,5 +175,26 @@ public struct QueryBuilder<T: Model> {
     
     public func exists() throws -> Bool {
         return try count() > 0
+    }
+    
+    @discardableResult
+    public func delete() throws -> Int {
+        return try BoltSpark.db.write { db in
+            if T.isSoftDeletable {
+                return try buildRequest().updateAll(db, [Column("deleted_at").set(to: Date())])
+            } else {
+                return try buildRequest().deleteAll(db)
+            }
+        }
+    }
+    
+    public func withTrashed() -> Self {
+        self._withTrashed = true
+        return self
+    }
+    
+    public func onlyTrashed() -> Self {
+        self._onlyTrashed = true
+        return self
     }
 }
