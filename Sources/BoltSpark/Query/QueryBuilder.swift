@@ -64,7 +64,7 @@ public class QueryBuilder<T: Model> {
         return builder
     }
     
-    // By defalut is =
+    // By default is =
     /// User.where("active", 1)
     public func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> Self {
         return self.where(column, "=", value)

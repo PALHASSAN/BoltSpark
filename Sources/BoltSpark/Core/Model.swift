@@ -10,7 +10,6 @@ import GRDB
 
 public protocol Model: FetchableRecord, MutablePersistableRecord, Codable {
     static var tableName: String { get }
-    
     static var fillable: [String] { get }
     static var guarded: [String] { get }
     static var hidden: [String] { get }
@@ -29,11 +28,6 @@ extension Model {
     
     public static var tableName: String {
         return "\(String(describing: self).lowercased())s"
-    }
-    
-    
-    public static func query() -> QueryBuilder<Self> {
-        return QueryBuilder(request: Self.all())
     }
     
     public static var fillable: [String] { [] }
@@ -123,35 +117,37 @@ extension Model {
         
         return copy
     }
+}
+
+extension Model {
+    private static var builder: QueryBuilder<Self> { QueryBuilder(request: Self.all()) }
     
-    public static func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { query().where(column, value) }
-    public static func `where`(_ column: String, _ operator: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> {
-        return query().where(column, `operator`, value)
-    }
-    public static func whereIn(_ column: String, _ values: [some DatabaseValueConvertible]) -> QueryBuilder<Self> {
-        return query().whereIn(column, values)
-    }
-    public static func whereNull(_ column: String) -> QueryBuilder<Self> { return query().whereNull(column) }
-    public static func whereNotNull(_ column: String) -> QueryBuilder<Self> { return query().whereNotNull(column) }
-    public static func orWhere(_ column: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> {
-        return query().orWhere(column, value)
-    }
+    public static func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { builder.where(column, value) }
+    public static func `where`(_ column: String, _ operator: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { builder.where(column, `operator`, value) }
+    public static func whereIn(_ column: String, _ values: [some DatabaseValueConvertible]) -> QueryBuilder<Self> { builder.whereIn(column, values) }
+    public static func whereNull(_ column: String) -> QueryBuilder<Self> { builder.whereNull(column) }
+    public static func whereNotNull(_ column: String) -> QueryBuilder<Self> { builder.whereNotNull(column) }
+    public static func orWhere(_ column: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { builder.orWhere(column, value) }
     
-    public static func select(_ columns: [String]) -> QueryBuilder<Self> { return query().select(columns) }
+    public static func select(_ columns: [String]) -> QueryBuilder<Self> { builder.select(columns) }
+    public static func orderBy(_ column: String, desc: Bool = false) -> QueryBuilder<Self> { builder.orderBy(column, desc: desc) }
+    public static func limit(_ n: Int) -> QueryBuilder<Self> { builder.limit(n) }
     
-    public static func find(_ id: some DatabaseValueConvertible) throws -> Self? { return try query().find(id) }
-    public static func first() throws -> Self? { return try query().first() }
-    public static func firstOrFail() throws -> Self { return try query().firstOrFail() }
-    public static func get() throws -> [Self] { return try query().get() }
-    public static func all() throws -> [Self] { return try query().all() }
-    public static func orderBy(_ column: String, desc: Bool = false) -> QueryBuilder<Self> {
-        return query().orderBy(column, desc: desc)
-    }
+    public static func with(_ relations: String...) -> QueryBuilder<Self> { builder.with(relations) }
+    public static func has(_ relation: String) -> QueryBuilder<Self> { builder.has(relation) }
+    public static func doesntHave(_ relation: String) -> QueryBuilder<Self> { builder.doesntHave(relation) }
+    public static func whereHas(_ relation: String, closure: (QueryBuilder<Self>) -> Void) -> QueryBuilder<Self> { builder.whereHas(relation, closure: closure) }
+    public static func whereDoesntHave(_ relation: String, closure: (QueryBuilder<Self>) -> Void) -> QueryBuilder<Self> { builder.whereDoesntHave(relation, closure: closure) }
     
-    public static func limit(_ n: Int) -> QueryBuilder<Self> { return query().limit(n) }
-    public static func count() throws -> Int { return try query().count() }
-    public static func exists() throws -> Bool { return try query().exists() }
+    public static func find(_ id: some DatabaseValueConvertible) throws -> Self? { try builder.find(id) }
+    public static func first() throws -> Self? { try builder.first() }
+    public static func firstOrFail() throws -> Self { try builder.firstOrFail() }
+    public static func get() throws -> [Self] { try builder.get() }
+    public static func all() throws -> [Self] { try builder.all() }
+    public static func count() throws -> Int { try builder.count() }
+    public static func exists() throws -> Bool { try builder.exists() }
+    public static func paginate(page: Int = 1, perPage: Int = 15) throws -> Paginator<Self> { try builder.paginate(page: page, perPage: perPage) }
     
-    public static func withTrashed() -> QueryBuilder<Self> { return query().withTrashed() }
-    public static func onlyTrashed() -> QueryBuilder<Self> { return query().onlyTrashed() }
+    public static func withTrashed() -> QueryBuilder<Self> { builder.withTrashed() }
+    public static func onlyTrashed() -> QueryBuilder<Self> { builder.onlyTrashed() }
 }

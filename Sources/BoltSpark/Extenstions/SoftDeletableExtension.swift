@@ -24,10 +24,10 @@ extension SoftDeletable {
     }
     
     public static func withTrashed() -> QueryBuilder<Self> {
-        return Self.query().withTrashed()
+        return QueryBuilder(request: Self.all()).withTrashed()
     }
 
     public static func onlyTrashed() -> QueryBuilder<Self> {
-        return Self.query().onlyTrashed()
+        return QueryBuilder(request: Self.all()).withTrashed()
     }
 }
