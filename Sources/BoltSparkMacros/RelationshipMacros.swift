@@ -59,10 +59,17 @@ public struct RelationshipMacro: PeerMacro, AccessorMacro {
             
         case "BelongsTo", "MorphTo":
             let generatedCode = """
-            get throws {
-                return try \(parsed.modelType).find(self.user_id)
-            }
-            """
+                get throws {
+                    guard let id = self.id else { return [] }
+                    let laravelModelName = "App\\\\Models\\\\\(parsed.modelType)"
+                    
+                    return try \(parsed.modelType)
+                        .whereHas("prayer_links") { query in
+                            query.where("model_type", laravelModelName)
+                                 .where("model_id", id)
+                        }.get()
+                }
+                """
             return [AccessorDeclSyntax(stringLiteral: generatedCode)]
             
         default:

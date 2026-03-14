@@ -7,7 +7,7 @@ import CompilerPluginSupport
 let package = Package(
     name: "BoltSpark",
     platforms: [
-        .iOS(.v17), .macOS(.v13)
+        .iOS(.v17), .macOS(.v14)
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -19,7 +19,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "602.0.0"),
-        .package(url: "https://github.com/PALHASSAN/LiveValidate.git", from: "0.2.3"),
+        .package(url: "https://github.com/PALHASSAN/LiveValidate.git", from: "0.2.4"),
     ],
     targets: [
         .macro(
