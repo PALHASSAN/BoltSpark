@@ -2,190 +2,160 @@
 //  QueryBuilder.swift
 //  BoltSpark
 //
-//  Created by Alhassan AlMakki on 21/09/1447 AH.
+//  Created by Alhassan AlMakki on 25/09/1447 AH.
 //
 
-import GRDB
 import Foundation
 
 public class QueryBuilder<T: Model> {
-    private var request: QueryInterfaceRequest<T>
-    let database: DatabaseWriter
-    var assembledCondition: SQLExpression?
-    
+    private var selectedColumns: [String] = ["*"]
+    private var wheres: [(sql: String, connector: String)] = []
+    private var arguments: [Any] = []
+    private var orders: [String] = []
+    private var limitCount: Int?
+    private var offsetCount: Int?
     private var _withTrashed: Bool = false
     private var _onlyTrashed: Bool = false
     
-    init(request: QueryInterfaceRequest<T>, database: DatabaseWriter) {
-        self.request = request
-        self.database = database
-    }
+    private var eagerLoads: [String] = []
     
-    private func buildRequest() -> QueryInterfaceRequest<T> {
-        var finalRequest = request
-        
-        if let finalCondition = self.assembledCondition {
-            finalRequest = finalRequest.filter(finalCondition)
-        }
-        
-        if T.isSoftDeletable {
-            if _onlyTrashed {
-                finalRequest = finalRequest.filter(Column("deleted_at") != nil)
-            } else if !_withTrashed {
-                finalRequest = finalRequest.filter(Column("deleted_at") == nil)
-            }
-        }
-        
-        return finalRequest
-    }
+    public init() {}
     
     // MARK: - Where Clauses
-    public func _whereRaw(_ sql: String, arguments: StatementArguments = []) -> Self {
-        let newCondition = sql.sqlExpression
-        if let existing = self.assembledCondition {
-            self.assembledCondition = (existing && newCondition)
+    @discardableResult
+    public func `where`(_ column: String, _ opOrValue: Any, _ value: Any? = nil) -> Self {
+        return addWhere(column: column, opOrValue: opOrValue, value: value, connector: "AND")
+    }
+    
+    @discardableResult
+    public func orWhere(_ column: String, _ opOrValue: Any, _ value: Any? = nil) -> Self {
+        return addWhere(column: column, opOrValue: opOrValue, value: value, connector: "OR")
+    }
+    
+    private func addWhere(column: String, opOrValue: Any, value: Any?, connector: String) -> Self {
+        if let actualValue = value {
+            wheres.append(("\(column) \(opOrValue) ?", connector))
+            arguments.append(actualValue)
         } else {
-            self.assembledCondition = newCondition
+            wheres.append(("\(column) = ?", connector))
+            arguments.append(opOrValue)
         }
         return self
     }
     
-    public func `where`(_ column: String, _ operator: String, _ value: some DatabaseValueConvertible) -> Self {
-        let col = Column(column)
-        let newCondition: SQLExpression
-        
-        switch `operator` {
-        case "=":  newCondition = (col == value)
-        case ">":  newCondition = (col > value)
-        case "<":  newCondition = (col < value)
-        case ">=": newCondition = (col >= value)
-        case "<=": newCondition = (col <= value)
-        case "!=": newCondition = (col != value)
-        default:   newCondition = (col == value)
-        }
-        
-        if let existing = self.assembledCondition {
-            self.assembledCondition = (existing && newCondition)
-        } else {
-            self.assembledCondition = newCondition
-        }
+    @discardableResult
+    public func whereIn(_ column: String, _ values: [Any]) -> Self {
+        guard !values.isEmpty else { return self }
+        let placeholders = String(repeating: "?,", count: values.count).dropLast()
+        wheres.append(("\(column) IN (\(placeholders))", "AND"))
+        arguments.append(contentsOf: values)
         return self
     }
     
-    public func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> Self {
-        return self.where(column, "=", value)
-    }
-    
-    public func whereIn(_ column: String, _ values: [some DatabaseValueConvertible]) -> Self {
-        let newExpr = values.contains(Column(column))
-        
-        if let existing = self.assembledCondition {
-            self.assembledCondition = (existing && newExpr)
-        } else {
-            self.assembledCondition = newExpr
-        }
+    @discardableResult
+    func whereIn(_ column: String, subquery: String) -> Self {
+        wheres.append(("\(column) IN (\(subquery))", "AND"))
         return self
     }
     
+    @discardableResult
     public func whereNull(_ column: String) -> Self {
-        let newCondition = (Column(column) == nil)
-        if let existing = self.assembledCondition {
-            self.assembledCondition = (existing && newCondition)
-        } else {
-            self.assembledCondition = newCondition
-        }
+        wheres.append("\(column) IS NULL")
         return self
     }
     
+    @discardableResult
     public func whereNotNull(_ column: String) -> Self {
-        let newCondition = (Column(column) != nil)
-        if let existing = self.assembledCondition {
-            self.assembledCondition = (existing && newCondition)
-        } else {
-            self.assembledCondition = newCondition
-        }
+        wheres.append("\(column) IS NOT NULL")
         return self
     }
     
-    public func orWhere(_ column: String, _ value: some DatabaseValueConvertible) -> Self {
-        let newCondition = (Column(column) == value)
-        if let existing = self.assembledCondition {
-            self.assembledCondition = (existing && newCondition)
-        } else {
-            self.assembledCondition = newCondition
-        }
-        return self
-    }
-    
+    // MARK: - Select & Order & Limit
     public func select(_ columns: [String]) -> Self {
-        self.request = request.select(columns.map { Column($0) })
+        self.selectedColumns = columns
         return self
     }
     
     public func orderBy(_ column: String, desc: Bool = false) -> Self {
-        let order = desc ? Column(column).desc : Column(column).asc
-        self.request = request.order(order)
+        let direction = desc ? "DESC" : "ASC"
+        orders.append("\(column) \(direction)")
         return self
     }
     
     public func limit(_ limit: Int, offset: Int? = nil) -> Self {
-        self.request = request.limit(limit, offset: offset)
+        self.limitCount = limit
+        self.offsetCount = offset
         return self
     }
-
-    // MARK: - Executing Methods
-    public func find(_ id: some DatabaseValueConvertible) throws -> T? {
-        try database.read { db in try buildRequest().filter(key: id).fetchOne(db) }
-    }
     
-    public func first() throws -> T? {
-        try database.read { db in try buildRequest().fetchOne(db) }
-    }
-    
-    public func firstOrFail() throws -> T {
-        guard let record = try first() else {
-            throw BoltError.modelNotFound("Record not found in \(T.tableName)")
-        }
-        return record
-    }
-    
+    // MARK: - Execution Methods
     public func get() throws -> [T] {
-        try database.read { db in try buildRequest().fetchAll(db) }
+        let sql = buildSQL()
+        let driver = try BoltSpark.driver(for: T.databaseName)
+        let rawData = try driver.fetch(sql, arguments: arguments)
+        
+        var models = try ModelMapper.map(rawData, to: T.self)
+        
+        if !eagerLoads.isEmpty && !models.isEmpty {
+            try performEagerLoading(on: &models)
+        }
+        return models
     }
     
     public func all() throws -> [T] {
-        try get()
+        return try get()
+    }
+    
+    public func first() throws -> T? {
+        return try self.limit(1).get().first
+    }
+    
+    public func firstOrFail() throws -> T {
+        guard let result = try first() else {
+            throw BoltError.mappingError("Record not found in \(T.tableName)")
+        }
+        return result
+    }
+    
+    public func find(_ id: Int64) throws -> T? {
+        return try self.where("id", id).first()
     }
     
     public func count() throws -> Int {
-        try database.read { db in try buildRequest().fetchCount(db) }
+        let sql = "SELECT COUNT(*) as total FROM (\(buildSQL()))"
+        let driver = try BoltSpark.driver(for: T.databaseName)
+        let result = try driver.fetch(sql, arguments: arguments)
+        return Int(result.first?["total"] as? Int64 ?? 0)
     }
     
     public func exists() throws -> Bool {
-        try count() > 0
+        return try count() > 0
     }
     
     @discardableResult
-    public func delete() throws -> Int {
-        try database.write { db in
-            if T.isSoftDeletable {
-                return try buildRequest().updateAll(db, [Column("deleted_at").set(to: Date())])
-            } else {
-                return try buildRequest().deleteAll(db)
-            }
+    public func delete() throws -> Bool {
+        let driver = try BoltSpark.driver(for: T.databaseName)
+        var sql = ""
+        
+        if T.isSoftDeletable && !_withTrashed {
+            sql = "UPDATE \(T.tableName) SET deleted_at = CURRENT_TIMESTAMP"
+        } else {
+            sql = "DELETE FROM \(T.tableName)"
         }
+        
+        sql += buildWhereClause()
+        try driver.execute(sql, arguments: arguments)
+        return true
     }
-
-    // MARK: - Eager Loading
+    
     public func with(_ relations: [String]) -> Self {
-        self.request = relations.reduce(self.request) { currentRequest, relation in
-            T.applyRelation(relation, to: currentRequest)
-        }
+        self.eagerLoads.append(contentsOf: relations)
         return self
     }
     
-    public func with(_ relations: String...) -> Self {
-        return self.with(relations)
+    public func with(_ relations: [String]) -> Self {
+        self.eagerLoads.append(contentsOf: relations)
+        return self
     }
     
     public func withTrashed() -> Self {
@@ -194,7 +164,89 @@ public class QueryBuilder<T: Model> {
     }
     
     public func onlyTrashed() -> Self {
+        self._withTrashed = true
         self._onlyTrashed = true
         return self
+    }
+    
+    // MARK: - Internal SQL Builder
+    private func buildWhereClause() -> String {
+        var finalConditions = wheres
+        
+        if T.isSoftDeletable && !_withTrashed {
+            let condition = _onlyTrashed ? "deleted_at IS NOT NULL" : "deleted_at IS NULL"
+            finalConditions.append((condition, "AND"))
+        }
+        
+        if finalConditions.isEmpty { return "" }
+        
+        var sql = " WHERE "
+        
+        for (index, condition) in finalConditions.enumerated() {
+            if index == 0 {
+                sql += condition.sql
+            } else {
+                sql += " \(condition.connector) \(condition.sql)"
+            }
+        }
+        
+        return sql
+    }
+    
+    private func buildSQL() -> String {
+        var sql = "SELECT \(selectedColumns.joined(separator: ", ")) FROM \(T.tableName)"
+        
+        sql += buildWhereClause()
+        
+        if !orders.isEmpty {
+            sql += " ORDER BY " + orders.joined(separator: ", ")
+        }
+        
+        if let limit = limitCount {
+            sql += " LIMIT \(limit)"
+            if let offset = offsetCount { sql += " OFFSET \(offset)" }
+        }
+        
+        return sql
+    }
+    
+    private func performEagerLoading(on models: inout [T]) throws {
+        let parentIds = models.compactMap { $0.id }
+        if parentIds.isEmpty { return }
+        
+        for relationName in eagerLoads {
+            let mirror = Mirror(reflecting: models[0])
+            
+            guard let child = mirror.children.first(where: {
+                $0.label?.replacingOccurrences(of: "_", with: "") == relationName
+            }), let relation = child.value as? BoltRelation else { continue }
+            
+            let relatedType = relation.relatedModelType
+            let relatedTableName = relatedType.tableName
+            
+            let foreignKey = relation.guessKey(parentTable: T.tableName)
+            
+            let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
+            let sql = "SELECT * FROM \(relatedType.tableName) WHERE \(foreignKey) IN (\(placeholders))"
+            
+            let driver = try BoltSpark.driver(for: relatedType.databaseName)
+            let rawRelatedData = try driver.fetch(sql, arguments: parentIds)
+            
+            let allRelatedModels = try ModelMapper.map(rawRelatedData, to: relatedType)
+            
+            for i in 0..<models.count {
+                let parentId = models[i].id
+                
+                let filteredChildren = allRelatedModels.filter { childModel in
+                    let childMirror = Mirror(reflecting: childModel)
+                    return childMirror.children.contains { child in
+                        let swiftLabel = child.label?.toSnakeCase() ?? ""
+                        return swiftLabel == foreignKey && (child.value as? Int64) == parentId
+                    }
+                }
+                
+                relation.setRelationData(filteredChildren)
+            }
+        }
     }
 }

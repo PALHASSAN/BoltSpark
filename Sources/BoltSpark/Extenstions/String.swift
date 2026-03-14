@@ -37,3 +37,14 @@ extension String {
         return self
     }
 }
+
+extension String {
+    func toSnakeCase() -> String {
+        return unicodeScalars.reduce("") {
+            if CharacterSet.uppercaseLetters.contains($1) {
+                return $0 + ($0.isEmpty ? "" : "_") + String($1).lowercased()
+            }
+            return $0 + String($1)
+        }
+    }
+}

@@ -5,8 +5,6 @@
 //  Created by Alhassan AlMakki on 22/09/1447 AH.
 //
 
-import GRDB
-
 extension SoftDeletable {
     public static var isSoftDeletable: Bool { true }
     private static var currentDb: DatabaseWriter { BoltSpark.connection(for: Self.databaseName) }
@@ -16,13 +14,13 @@ extension SoftDeletable {
         record.deleted_at = nil
         
         try Self.currentDb.write { db in
-                    try record.update(db)
+            try record.update(db)
         }
     }
     
     public func forceDelete() throws {
         try Self.currentDb.write { db in
-                    _ = try self.delete(db)
+            _ = try self.delete(db)
         }
     }
     
