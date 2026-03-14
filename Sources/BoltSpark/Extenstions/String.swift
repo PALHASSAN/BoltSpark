@@ -5,6 +5,8 @@
 //  Created by Alhassan AlMakki on 21/09/1447 AH.
 //
 
+import Foundation
+
 extension String {
     public var singularized: String {
         let lower = self.lowercased()

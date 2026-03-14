@@ -42,61 +42,106 @@ extension Model {
     }
 }
 
-// - MARK: Direct Querying
 extension Model {
+    public static func query() -> QueryBuilder<Self> {
+        return QueryBuilder<Self>()
+    }
+    
+    // MARK: - Proxy Fetching Methods
+    public static func with(_ relations: String...) -> QueryBuilder<Self> {
+        return query().with(relations)
+    }
+
+    public static func all() throws -> [Self] {
+        return try query().get()
+    }
+
+    public static func find(_ id: Int64) throws -> Self? {
+        return try query().find(id)
+    }
+
+    public static func first() throws -> Self? {
+        return try query().first()
+    }
+    
+    public static func firstOrFail() throws -> Self {
+        return try query().firstOrFail()
+    }
+
+    public static func count() throws -> Int {
+        return try query().count()
+    }
+    
+    public static func exists() throws -> Bool {
+        return try query().exists()
+    }
+
+    public static func paginate(page: Int, perPage: Int = 15) throws -> Paginator<Self> {
+        return try query().paginate(page: page, perPage: perPage)
+    }
+
+    // MARK: - Proxy Query Methods (Chaining)
     @discardableResult
     public static func `where`(_ column: String, _ opOrValue: Any, _ value: Any? = nil) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().where(column, opOrValue, value)
+        return query().where(column, opOrValue, value)
     }
-    
+
     @discardableResult
     public static func orWhere(_ column: String, _ opOrValue: Any, _ value: Any? = nil) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().orWhere(column, opOrValue, value)
+        return query().orWhere(column, opOrValue, value)
     }
-    
+
     @discardableResult
     public static func whereIn(_ column: String, _ values: [Any]) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().whereIn(column, values)
+        return query().whereIn(column, values)
     }
     
     @discardableResult
     public static func whereNull(_ column: String) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().whereNull(column)
+        return query().whereNull(column)
     }
     
     @discardableResult
     public static func whereNotNull(_ column: String) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().whereNotNull(column)
+        return query().whereNotNull(column)
+    }
+    
+    @discardableResult
+    public static func orWhereNull(_ column: String) -> QueryBuilder<Self> {
+        return query().orWhereNull(column)
+    }
+    
+    @discardableResult
+    public static func orWhereNotNull(_ column: String) -> QueryBuilder<Self> {
+        return query().orWhereNotNull(column)
     }
     
     public static func select(_ columns: [String]) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().select(columns)
+        return query().select(columns)
     }
-    
-    public static func orderBy(_ column: String, desc: Bool = false) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().orderBy(column, desc: desc)
-    }
-    
-    public static func limit(_ limit: Int, offset: Int? = nil) -> QueryBuilder<Self> {
-        return QueryBuilder<Self>().limit(limit, offset: offset)
-    }
-}
 
-// MARK: - Quick Fetching
-extension Model {
-    public static func all() throws -> [Self] {
-        return try QueryBuilder<Self>().get()
+    public static func orderBy(_ column: String, desc: Bool = false) -> QueryBuilder<Self> {
+        return query().orderBy(column, desc: desc)
     }
     
-    public static func first() throws -> Self? {
-        return try QueryBuilder<Self>().first()
+    public static func latest(_ column: String = "created_at") -> QueryBuilder<Self> {
+        return query().latest(column)
     }
     
-    public static func find(_ id: Int64) throws -> Self? {
-        return try QueryBuilder<Self>().find(id)
+    public static func oldest(_ column: String = "created_at") -> QueryBuilder<Self> {
+        return query().oldest(column)
+    }
+
+    public static func limit(_ limit: Int, offset: Int? = nil) -> QueryBuilder<Self> {
+        return query().limit(limit, offset: offset)
     }
     
-    public static func count() throws -> Int {
-        return try QueryBuilder<Self>().count()
+    // MARK: - Soft Deletes Proxy
+    public static func withTrashed() -> QueryBuilder<Self> {
+        return query().withTrashed()
+    }
+    
+    public static func onlyTrashed() -> QueryBuilder<Self> {
+        return query().onlyTrashed()
     }
 }

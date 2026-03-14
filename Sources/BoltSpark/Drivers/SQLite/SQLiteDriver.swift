@@ -8,10 +8,14 @@
 import Foundation
 import SQLite3
 
-public final class SQLiteDriver: DatabaseDriver {
-    private var db: OpaquePointer?
+public final class SQLiteDriver: DatabaseDriver, @unchecked Sendable {
+    nonisolated(unsafe) private var db: OpaquePointer?
+    private let lock = NSLock()
     
     public init(path: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        
         if sqlite3_open(path, &db) != SQLITE_OK {
             let error = String(cString: sqlite3_errmsg(db))
             throw BoltError.connectionFailed(error)
@@ -22,6 +26,9 @@ public final class SQLiteDriver: DatabaseDriver {
     }
     
     public func execute(_ sql: String, arguments: [Any]) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        
         var statement: OpaquePointer?
         
         if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
@@ -38,6 +45,9 @@ public final class SQLiteDriver: DatabaseDriver {
     }
     
     public func fetch(_ sql: String, arguments: [Any]) throws -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+        
         var statement: OpaquePointer?
         defer { sqlite3_finalize(statement) }
         

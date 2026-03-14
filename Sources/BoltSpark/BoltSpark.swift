@@ -1,8 +1,13 @@
 import Foundation
 
-public final class BoltSpark {
-    private static var drivers: [String: DatabaseDriver] = [:]
+public final class BoltSpark: @unchecked Sendable {
+    private static let lock = NSLock()
+    
+    nonisolated(unsafe) private static var drivers: [String: DatabaseDriver] = [:]
     static func driver(for name: String) throws -> DatabaseDriver {
+        lock.lock()
+        defer { lock.unlock() }
+        
         guard let driver = drivers[name] else {
             throw BoltError.databaseNotFound(name)
         }

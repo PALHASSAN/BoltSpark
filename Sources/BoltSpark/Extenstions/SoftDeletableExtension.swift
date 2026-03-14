@@ -5,30 +5,32 @@
 //  Created by Alhassan AlMakki on 22/09/1447 AH.
 //
 
+import Foundation
+
 extension SoftDeletable {
     public static var isSoftDeletable: Bool { true }
-    private static var currentDb: DatabaseWriter { BoltSpark.connection(for: Self.databaseName) }
     
     public func restore() throws {
-        var record = self
-        record.deleted_at = nil
+        let driver = try BoltSpark.driver(for: Self.databaseName)
+        guard let id = self.idValue else { return }
         
-        try Self.currentDb.write { db in
-            try record.update(db)
-        }
+        let sql = "UPDATE \(Self.tableName) SET deleted_at = NULL WHERE id = ?"
+        try driver.execute(sql, arguments: [id])
     }
     
     public func forceDelete() throws {
-        try Self.currentDb.write { db in
-            _ = try self.delete(db)
-        }
+        let driver = try BoltSpark.driver(for: Self.databaseName)
+        guard let id = self.idValue else { return }
+        
+        let sql = "DELETE FROM \(Self.tableName) WHERE id = ?"
+        try driver.execute(sql, arguments: [id])
     }
     
     public static func withTrashed() -> QueryBuilder<Self> {
-        return QueryBuilder(request: Self.all(), database: currentDb).withTrashed()
+        return QueryBuilder<Self>().withTrashed()
     }
-
+    
     public static func onlyTrashed() -> QueryBuilder<Self> {
-        return QueryBuilder(request: Self.all(), database: currentDb).onlyTrashed()
+        return QueryBuilder<Self>().onlyTrashed()
     }
 }

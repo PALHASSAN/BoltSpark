@@ -7,7 +7,7 @@
 
 import Foundation
 
-public protocol DatabaseDriver {
+public protocol DatabaseDriver: Sendable {
     func execute(_ sql: String, arguments: [Any]) throws
     func fetch(_ sql: String, arguments: [Any]) throws -> [[String: Any]]
 }

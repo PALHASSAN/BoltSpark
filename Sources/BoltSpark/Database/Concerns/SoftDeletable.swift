@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import GRDB
 
 public protocol SoftDeletable: Model {
     var deleted_at: Date? { get set }

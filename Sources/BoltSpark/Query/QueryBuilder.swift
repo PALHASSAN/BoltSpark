@@ -53,20 +53,26 @@ public class QueryBuilder<T: Model> {
     }
     
     @discardableResult
-    func whereIn(_ column: String, subquery: String) -> Self {
-        wheres.append(("\(column) IN (\(subquery))", "AND"))
-        return self
-    }
-    
-    @discardableResult
     public func whereNull(_ column: String) -> Self {
-        wheres.append("\(column) IS NULL")
+        wheres.append(("\(column) IS NULL", "AND"))
         return self
     }
     
     @discardableResult
     public func whereNotNull(_ column: String) -> Self {
-        wheres.append("\(column) IS NOT NULL")
+        wheres.append(("\(column) IS NOT NULL", "AND"))
+        return self
+    }
+    
+    @discardableResult
+    public func orWhereNull(_ column: String) -> Self {
+        wheres.append(("\(column) IS NULL", "OR"))
+        return self
+    }
+
+    @discardableResult
+    public func orWhereNotNull(_ column: String) -> Self {
+        wheres.append(("\(column) IS NOT NULL", "OR"))
         return self
     }
     
@@ -148,11 +154,7 @@ public class QueryBuilder<T: Model> {
         return true
     }
     
-    public func with(_ relations: [String]) -> Self {
-        self.eagerLoads.append(contentsOf: relations)
-        return self
-    }
-    
+    @discardableResult
     public func with(_ relations: [String]) -> Self {
         self.eagerLoads.append(contentsOf: relations)
         return self
@@ -209,12 +211,46 @@ public class QueryBuilder<T: Model> {
         
         return sql
     }
+}
+
+
+extension QueryBuilder {
+    public func paginate(page: Int, perPage: Int = 15) throws -> Paginator<T> {
+        let total = try self.count()
+        let offset = (page - 1) * perPage
+        
+        let items = try self.limit(perPage, offset: offset).get()
+        
+        return Paginator(data: items, total: total, perPage: perPage, currentPage: page)
+    }
     
+    // MARK: - Sorting by desc
+    public func latest(_ column: String = "created_at") -> Self {
+        return self.orderBy(column, desc: true)
+    }
+    
+    public func oldest(_ column: String = "created_at") -> Self {
+        return self.orderBy(column, desc: false)
+    }
+}
+
+
+extension QueryBuilder {
     private func performEagerLoading(on models: inout [T]) throws {
-        let parentIds = models.compactMap { $0.id }
+        let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
         
-        for relationName in eagerLoads {
+        var groupedRelations: [String: [String]] = [:]
+        for path in eagerLoads {
+            let parts = path.split(separator: ".")
+            let root = String(parts[0])
+            let remaining = parts.dropFirst().map(String.init).joined(separator: ".")
+            
+            if groupedRelations[root] == nil { groupedRelations[root] = [] }
+            if !remaining.isEmpty { groupedRelations[root]?.append(remaining) }
+        }
+        
+        for (relationName, nestedPaths) in groupedRelations {
             let mirror = Mirror(reflecting: models[0])
             
             guard let child = mirror.children.first(where: {
@@ -222,31 +258,54 @@ public class QueryBuilder<T: Model> {
             }), let relation = child.value as? BoltRelation else { continue }
             
             let relatedType = relation.relatedModelType
-            let relatedTableName = relatedType.tableName
-            
             let foreignKey = relation.guessKey(parentTable: T.tableName)
+            let extras = relation.extraConditions(parentTable: T.tableName)
             
             let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
-            let sql = "SELECT * FROM \(relatedType.tableName) WHERE \(foreignKey) IN (\(placeholders))"
+            var sql = "SELECT * FROM \(relatedType.tableName) WHERE \(foreignKey) IN (\(placeholders))"
+            var queryArgs: [Any] = parentIds
+            
+            for (column, value) in extras {
+                sql += " AND \(column) = ?"
+                queryArgs.append(value)
+            }
             
             let driver = try BoltSpark.driver(for: relatedType.databaseName)
-            let rawRelatedData = try driver.fetch(sql, arguments: parentIds)
+            let rawRelatedData = try driver.fetch(sql, arguments: queryArgs)
             
-            let allRelatedModels = try ModelMapper.map(rawRelatedData, to: relatedType)
+            var allRelatedModels = try ModelMapper.map(rawRelatedData, to: relatedType) as [any Model]
+            
+            if !nestedPaths.isEmpty && !allRelatedModels.isEmpty {
+                try eagerLoadNested(models: &allRelatedModels, type: relatedType, relations: nestedPaths)
+            }
             
             for i in 0..<models.count {
-                let parentId = models[i].id
+                let parentId = models[i].idValue
                 
-                let filteredChildren = allRelatedModels.filter { childModel in
-                    let childMirror = Mirror(reflecting: childModel)
-                    return childMirror.children.contains { child in
-                        let swiftLabel = child.label?.toSnakeCase() ?? ""
-                        return swiftLabel == foreignKey && (child.value as? Int64) == parentId
+                let filteredChildren = allRelatedModels.filter { childInstance in
+                    let childMirror = Mirror(reflecting: childInstance)
+                    return childMirror.children.contains { childAttr in
+                        let swiftLabel = childAttr.label?.toSnakeCase() ?? ""
+                        return swiftLabel == foreignKey && (childAttr.value as? Int64) == parentId
                     }
                 }
-                
                 relation.setRelationData(filteredChildren)
             }
         }
+    }
+    
+    private func eagerLoadNested(models: inout [any Model], type: any Model.Type, relations: [String]) throws {
+        func openAndLoad<M: Model>(_ type: M.Type, models: inout [any Model], relations: [String]) throws {
+            var typedModels = models.compactMap { $0 as? M }
+            if typedModels.isEmpty { return }
+            
+            let builder = QueryBuilder<M>()
+            builder.with(relations)
+            try builder.performEagerLoading(on: &typedModels)
+            
+            models = typedModels
+        }
+        
+        try openAndLoad(type, models: &models, relations: relations)
     }
 }

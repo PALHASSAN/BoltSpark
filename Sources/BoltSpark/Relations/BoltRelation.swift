@@ -8,10 +8,15 @@
 import Foundation
 
 public protocol BoltRelation {
-    var key: String { get }
+    var key: String { get set }
     
     var relatedModelType: any Model.Type { get }
     func setRelationData(_ data: Any)
     
     func guessKey(parentTable: String) -> String
+    func extraConditions(parentTable: String) -> [String: Any]
+}
+
+extension BoltRelation {
+    public func extraConditions(parentTable: String) -> [String: Any] { return [:] }
 }

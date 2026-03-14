@@ -5,6 +5,8 @@
 //  Created by Alhassan AlMakki on 21/09/1447 AH.
 //
 
+import Foundation
+
 public enum BoltError: Error, LocalizedError {
     case connectionFailed(String)
     case invalidSQL(String)
@@ -19,5 +21,6 @@ public enum BoltError: Error, LocalizedError {
         case .executionError(let msg): return "🚫 BoltSpark Execution Failed: \(msg)"
         case .mappingError(let msg): return "🧩 BoltSpark Mapping Failed: \(msg)"
         case .databaseNotFound(let msg): return "📂 BoltSpark DB Not Found: \(msg)"
+        }
     }
 }
