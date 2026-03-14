@@ -56,53 +56,64 @@ struct BoltSparkVerifier: DatabasePresenceVerifier {
 }
 
 public enum BoltSpark {
-    /// A lock to ensure thread-safe access to the database (Swift 6 safety)
     private static let lock = NSLock()
     
-    /// Internal storage for the database connection
-    nonisolated(unsafe) private static var _db: DatabaseWriter?
-    
-    /// The global accessor that models and query builders use internally
+    nonisolated(unsafe) private static var _connections: [String: DatabaseWriter] = [:]
+    nonisolated(unsafe) private static var _dataDirectory: String?
+
     public static var db: DatabaseWriter {
+        return connection(for: "boltspark")
+    }
+
+    public static func connection(for name: String) -> DatabaseWriter {
         lock.lock()
         defer { lock.unlock() }
         
-        // 1. If the developer already provided a connection via setup(), use it.
-        if let connection = _db {
-            return connection
+        let key = name.lowercased()
+        
+        if let existing = _connections[key] {
+            return existing
         }
         
-        // 2. If no connection exists, initialize the default "Zero-Config" database.
+        if let dir = _dataDirectory,
+           let path = Bundle.main.path(forResource: key, ofType: "sqlite", inDirectory: dir) {
+            do {
+                let queue = try DatabaseQueue(path: path)
+                _connections[key] = queue
+                setupValidation()
+                return queue
+            } catch {
+                #if DEBUG
+                print("⚠️ BoltSpark: Failed to open bundle database '\(key)': \(error)")
+                #endif
+            }
+        }
+        
+        return initializeDefault(name: key)
+    }
+
+    public static func setup(directory: String) {
+        lock.lock()
+        self._dataDirectory = directory
+        lock.unlock()
+    }
+
+    private static func initializeDefault(name: String) -> DatabaseWriter {
         do {
             let folderURL = try FileManager.default
                 .url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            let dbURL = folderURL.appendingPathComponent("boltspark.sqlite")
+            let dbURL = folderURL.appendingPathComponent("\(name).sqlite")
             
-            // Using DatabasePool for high-performance concurrent reads
             let pool = try DatabasePool(path: dbURL.path)
-            
-#if DEBUG
-            print("⚡️ BoltSpark: Database auto-initialized at: \(dbURL.path)")
-#endif
-            
-            _db = pool
-            Task { @MainActor in
-                ValidateConfig.setup(engine: .custom(BoltSparkVerifier()))
-            }
+            _connections[name] = pool
+            setupValidation()
             return pool
         } catch {
-            // If we can't create a database, the app cannot function.
-            fatalError("⚡️ BoltSpark Error: Failed to auto-initialize database: \(error)")
+            fatalError("⚡️ BoltSpark: Critical Error initializing '\(name)': \(error)")
         }
     }
-    
-    /// Optional manual setup if the developer wants to use a specific database or path
-    /// - Parameter db: A DatabaseWriter instance (DatabaseQueue or DatabasePool)
-    public static func setup(_ db: DatabaseWriter) {
-        lock.lock()
-        self._db = db
-        lock.unlock()
-        
+
+    private static func setupValidation() {
         Task { @MainActor in
             ValidateConfig.setup(engine: .custom(BoltSparkVerifier()))
         }

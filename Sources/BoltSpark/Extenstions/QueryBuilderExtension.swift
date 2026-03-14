@@ -24,7 +24,7 @@ extension QueryBuilder {
     
     public func whereHas(_ related: String, closure: (QueryBuilder<T>) -> Void) -> Self {
         let foreignKey = "\(T.tableName.singularized)_id"
-        let subQueryBuilder = QueryBuilder<T>(request: T.all())
+        let subQueryBuilder = QueryBuilder<T>(request: T.all(), database: self.database)
         closure(subQueryBuilder)
         
         var sql = "EXISTS (SELECT 1 FROM \(related) WHERE \(related).\(foreignKey) = \(T.tableName).id"
@@ -38,7 +38,7 @@ extension QueryBuilder {
     
     public func whereDoesntHave(_ related: String, closure: (QueryBuilder<T>) -> Void) -> Self {
         let foreignKey = "\(T.tableName.singularized)_id"
-        let subQueryBuilder = QueryBuilder<T>(request: T.all())
+        let subQueryBuilder = QueryBuilder<T>(request: T.all(), database: self.database)
         closure(subQueryBuilder)
         
         var sql = "NOT EXISTS (SELECT 1 FROM \(related) WHERE \(related).\(foreignKey) = \(T.tableName).id"

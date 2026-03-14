@@ -10,6 +10,7 @@ import GRDB
 
 public protocol Model: FetchableRecord, MutablePersistableRecord, Codable {
     static var tableName: String { get }
+    static var databaseName: String { get }
     static var fillable: [String] { get }
     static var guarded: [String] { get }
     static var hidden: [String] { get }
@@ -17,46 +18,43 @@ public protocol Model: FetchableRecord, MutablePersistableRecord, Codable {
     var id: Int64? { get set }
     static var isSoftDeletable: Bool { get }
     
-    // Only working with "with" method
     static func applyRelation(_ name: String, to request: QueryInterfaceRequest<Self>) -> QueryInterfaceRequest<Self>
 }
 
 extension Model {
-    public static var databaseTableName: String {
-        return tableName
-    }
+    public static var databaseTableName: String { return tableName }
     
     public static var tableName: String {
         return "\(String(describing: self).lowercased())s"
     }
     
+    public static var databaseName: String { "boltspark" }
     public static var fillable: [String] { [] }
     public static var guarded: [String] { ["id"] }
     public static var hidden: [String] { [] }
-    
     public static var isSoftDeletable: Bool { false }
     
-    // Only working with "with" method
     public static func applyRelation(_ name: String, to request: QueryInterfaceRequest<Self>) -> QueryInterfaceRequest<Self> {
+        #if DEBUG
         print("⚠️ BoltSpark: Relation '\(name)' not found on \(Self.tableName).")
+        #endif
         return request
     }
     
     private static func sanitize(_ data: [String: Any]) -> [String: Any] {
         var sanitized = data
-        
         if !fillable.isEmpty {
             sanitized = sanitized.filter { fillable.contains($0.key) }
         }
-        
         sanitized = sanitized.filter { !guarded.contains($0.key) }
-        
         return sanitized
     }
     
+    // MARK: - Instance Operations (Using Correct Database)
+    private var currentDb: DatabaseWriter { BoltSpark.connection(for: Self.databaseName) }
+
     public static func create(_ data: [String: Any]) throws -> Self {
         let safeData = sanitize(data)
-        
         let jsonData = try JSONSerialization.data(withJSONObject: safeData)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -73,10 +71,7 @@ extension Model {
             timeModel.updated_at = now
             self = timeModel as! Self
         }
-        
-        try BoltSpark.db.write { db in
-            try self.insert(db)
-        }
+        try currentDb.write { db in try self.insert(db) }
         return self
     }
     
@@ -85,42 +80,34 @@ extension Model {
             timeModel.updated_at = Date()
             self = timeModel as! Self
         }
-        
-        try BoltSpark.db.write { db in
-            try self.update(db)
-        }
+        try currentDb.write { db in try self.update(db) }
         return self
     }
     
     public mutating func save() throws {
-        try BoltSpark.db.write { db in
-            try self.save(db)
-        }
+        try currentDb.write { db in try self.save(db) }
     }
     
     @discardableResult
     public func delete() throws -> Self {
         var copy = self
-        
         if var softModel = copy as? any SoftDeletable {
             softModel.deleted_at = Date()
             copy = softModel as! Self
-            
-            try BoltSpark.db.write { db in
-                _ = try self.update(db)
-            }
+            try currentDb.write { db in _ = try copy.update(db) }
         } else {
-            try BoltSpark.db.write { db in
-                _ = try self.delete(db)
-            }
+            try currentDb.write { db in _ = try self.delete(db) }
         }
-        
         return copy
     }
 }
 
+// MARK: - Direct Query Facade
 extension Model {
-    private static var builder: QueryBuilder<Self> { QueryBuilder(request: Self.all()) }
+    private static var builder: QueryBuilder<Self> {
+        let db = BoltSpark.connection(for: Self.databaseName)
+        return QueryBuilder(request: Self.all(), database: db)
+    }
     
     public static func `where`(_ column: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { builder.where(column, value) }
     public static func `where`(_ column: String, _ operator: String, _ value: some DatabaseValueConvertible) -> QueryBuilder<Self> { builder.where(column, `operator`, value) }
