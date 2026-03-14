@@ -42,7 +42,11 @@ public class QueryBuilder<T: Model> {
     // MARK: - Where Clauses
     public func _whereRaw(_ sql: String, arguments: StatementArguments = []) -> Self {
         let newCondition = sql.sqlExpression
-        self.assembledCondition = self.assembledCondition.map { $0 && newCondition } ?? newCondition
+        if let existing = self.assembledCondition {
+            self.assembledCondition = (existing && newCondition)
+        } else {
+            self.assembledCondition = newCondition
+        }
         return self
     }
     
@@ -60,7 +64,11 @@ public class QueryBuilder<T: Model> {
         default:   newCondition = (col == value)
         }
         
-        self.assembledCondition = self.assembledCondition.map { $0 && newCondition } ?? newCondition
+        if let existing = self.assembledCondition {
+            self.assembledCondition = (existing && newCondition)
+        } else {
+            self.assembledCondition = newCondition
+        }
         return self
     }
     
@@ -70,25 +78,42 @@ public class QueryBuilder<T: Model> {
     
     public func whereIn(_ column: String, _ values: [some DatabaseValueConvertible]) -> Self {
         let newExpr = values.contains(Column(column))
-        self.assembledCondition = self.assembledCondition.map { $0 && newExpr } ?? newExpr
+        
+        if let existing = self.assembledCondition {
+            self.assembledCondition = (existing && newExpr)
+        } else {
+            self.assembledCondition = newExpr
+        }
         return self
     }
     
     public func whereNull(_ column: String) -> Self {
         let newCondition = (Column(column) == nil)
-        self.assembledCondition = self.assembledCondition.map { $0 && newCondition } ?? newCondition
+        if let existing = self.assembledCondition {
+            self.assembledCondition = (existing && newCondition)
+        } else {
+            self.assembledCondition = newCondition
+        }
         return self
     }
     
     public func whereNotNull(_ column: String) -> Self {
         let newCondition = (Column(column) != nil)
-        self.assembledCondition = self.assembledCondition.map { $0 && newCondition } ?? newCondition
+        if let existing = self.assembledCondition {
+            self.assembledCondition = (existing && newCondition)
+        } else {
+            self.assembledCondition = newCondition
+        }
         return self
     }
     
     public func orWhere(_ column: String, _ value: some DatabaseValueConvertible) -> Self {
         let newCondition = (Column(column) == value)
-        self.assembledCondition = self.assembledCondition.map { $0 || newCondition } ?? newCondition
+        if let existing = self.assembledCondition {
+            self.assembledCondition = (existing && newCondition)
+        } else {
+            self.assembledCondition = newCondition
+        }
         return self
     }
     
