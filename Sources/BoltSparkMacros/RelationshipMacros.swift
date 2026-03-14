@@ -9,8 +9,8 @@ import SwiftSyntax
 import SwiftSyntaxMacros
 
 public struct RelationshipMacro: PeerMacro, AccessorMacro {
-
-    static func parse(declaration: DeclSyntaxProtocol, node: AttributeSyntax) -> (identifier: String, modelType: String, macroName: String)? {
+    
+    static func parse(declaration: DeclSyntaxProtocol, node: AttributeSyntax) -> (identifier: String, modelType: String, macroName: String, extraArgs: String)? {
         guard let varDecl = declaration.as(VariableDeclSyntax.self),
               let binding = varDecl.bindings.first,
               let identifier = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
@@ -21,14 +21,18 @@ public struct RelationshipMacro: PeerMacro, AccessorMacro {
               let macroName = node.attributeName.as(IdentifierTypeSyntax.self)?.name.text else {
             return nil
         }
-        return (identifier, base.baseName.text, macroName)
+        let extraArgsList = argList.dropFirst()
+        let extraArgs = extraArgsList.isEmpty ? "" : ", " + extraArgsList.map { $0.description.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: ", ")
+        
+        return (identifier, base.baseName.text, macroName, extraArgs)
     }
-
+    
     public static func expansion(of node: AttributeSyntax, providingPeersOf declaration: some DeclSyntaxProtocol, in context: some MacroExpansionContext) throws -> [DeclSyntax] {
         guard let parsed = parse(declaration: declaration, node: node) else { return [] }
         let funcName = parsed.macroName.prefix(1).lowercased() + parsed.macroName.dropFirst()
         
-        let generatedCode = "public static let `$\(parsed.identifier)` = \(funcName)(\(parsed.modelType).self)"
+
+        let generatedCode = "public static let `$\(parsed.identifier)` = \(funcName)(\(parsed.modelType).self\(parsed.extraArgs))"
         
         return [DeclSyntax(stringLiteral: generatedCode)]
     }
