@@ -240,6 +240,9 @@ extension QueryBuilder {
         let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
         
+        let template = unsafeBitCast(MemoryLayout<T>.size, to: T.self)
+        let templateMirror = Mirror(reflecting: template)
+        
         var groupedRelations: [String: [String]] = [:]
         for path in eagerLoads {
             let parts = path.split(separator: ".")
@@ -251,68 +254,63 @@ extension QueryBuilder {
         }
         
         for (relationName, nestedPaths) in groupedRelations {
-            let mirror = Mirror(reflecting: models[0])
-            guard let child = mirror.children.first(where: {
+            guard let child = templateMirror.children.first(where: {
                 $0.label?.replacingOccurrences(of: "_", with: "") == relationName
-            }), let relation = child.value as? BoltRelation else { continue }
+            }), let templateRelation = child.value as? BoltRelation else { continue }
             
-            let relatedType = relation.relatedModelType
-            try openAndLoad(relatedType, models: &models, relation: relation, parentIds: parentIds, nested: nestedPaths)
+            let relatedType = templateRelation.relatedModelType
+            try openAndLoad(relatedType, models: &models, relation: templateRelation, relationName: relationName, parentIds: parentIds, nested: nestedPaths)
         }
     }
     
-    private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, parentIds: [Int64], nested: [String]) throws {
+    private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
         let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
         var sql = ""
         var args: [Any] = parentIds
         
         if let pivot = relation.pivotConfig(parentTable: T.tableName) {
             sql = "SELECT \(M.tableName).*, \(pivot.table).\(pivot.parentKey) as pivot_parent_id FROM \(M.tableName) INNER JOIN \(pivot.table) ON \(M.tableName).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) IN (\(placeholders))"
-            
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                sql += " AND \(pivot.table).\(col) = ?"
-                args.append(val)
+                sql += " AND \(pivot.table).\(col) = ?"; args.append(val)
             }
         } else {
             let foreignKey = relation.guessKey(parentTable: T.tableName)
             sql = "SELECT * FROM \(M.tableName) WHERE \(foreignKey) IN (\(placeholders))"
-            
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                sql += " AND \(col) = ?"
-                args.append(val)
+                sql += " AND \(col) = ?"; args.append(val)
             }
         }
         
         let driver = try BoltSpark.driver(for: M.databaseName)
         let rawData = try driver.fetch(sql, arguments: args)
+        let relatedModels = try ModelMapper.map(rawData, to: M.self)
         
-        var uniqueModelsMap: [Int64: M] = [:]
-        let allMappedModels = try ModelMapper.map(rawData, to: M.self)
-        for model in allMappedModels {
-            if let id = model.idValue { uniqueModelsMap[id] = model }
-        }
-        var relatedModels = Array(uniqueModelsMap.values)
-        
-        if !nested.isEmpty && !relatedModels.isEmpty {
-            var erased = relatedModels as [any Model]
+        var finalRelatedModels = relatedModels
+        if !nested.isEmpty && !finalRelatedModels.isEmpty {
+            var erased = finalRelatedModels as [any Model]
             try eagerLoadNested(models: &erased, type: M.self, relations: nested)
-            relatedModels = erased.compactMap { $0 as? M }
+            finalRelatedModels = erased.compactMap { $0 as? M }
         }
         
         for i in 0..<models.count {
             let pid = models[i].idValue
             
-            if relation.pivotConfig(parentTable: T.tableName) != nil {
-                let childIds = rawData.filter { ($0["pivot_parent_id"] as? Int64) == pid }.compactMap { $0["id"] as? Int64 }
-                let filteredChildren = relatedModels.filter { childIds.contains($0.idValue ?? -1) }
-                relation.setRelationData(filteredChildren)
-            } else {
-                let foreignKey = relation.guessKey(parentTable: T.tableName)
-                let filteredChildren = relatedModels.filter { child in
-                    let m = Mirror(reflecting: child)
-                    return m.children.contains { ($0.label?.toSnakeCase() == foreignKey) && ($0.value as? Int64 == pid) }
+            let m = Mirror(reflecting: models[i])
+            if let child = m.children.first(where: { $0.label?.replacingOccurrences(of: "_", with: "") == relationName }),
+               let modelRelation = child.value as? BoltRelation {
+                
+                if relation.pivotConfig(parentTable: T.tableName) != nil {
+                    let childIds = rawData.filter { ($0["pivot_parent_id"] as? Int64) == pid }.compactMap { $0["id"] as? Int64 }
+                    let filtered = finalRelatedModels.filter { childIds.contains($0.idValue ?? -1) }
+                    modelRelation.setRelationData(filtered)
+                } else {
+                    let foreignKey = relation.guessKey(parentTable: T.tableName)
+                    let filtered = finalRelatedModels.filter { child in
+                        let cm = Mirror(reflecting: child)
+                        return cm.children.contains { $0.label?.toSnakeCase() == foreignKey && ($0.value as? Int64) == pid }
+                    }
+                    modelRelation.setRelationData(filtered)
                 }
-                relation.setRelationData(filteredChildren)
             }
         }
     }

@@ -17,9 +17,13 @@ public final class HasMany<Related: Model>: BoltRelation, Codable {
         return key.isEmpty ? "\(parentTable.singularized)_id" : key
     }
     
-    public init() {}
+    public init(wrappedValue: [Related] = [], key: String = "") {
+        self.wrappedValue = wrappedValue
+        self.key = key
+    }
+    
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws {}
+    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -28,14 +32,18 @@ public final class HasOne<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: Related?
     public var key: String = ""
     public var relatedModelType: any Model.Type { Related.self }
-    public init() {}
+    
+    public init(wrappedValue: Related? = nil, key: String = "") {
+        self.wrappedValue = wrappedValue
+        self.key = key
+    }
     
     public func guessKey(parentTable: String) -> String {
         return key.isEmpty ? "\(parentTable.singularized)_id" : key
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
-    public init(from decoder: Decoder) throws {}
+    public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -49,9 +57,13 @@ public final class BelongsTo<Related: Model>: BoltRelation, Codable {
         return "id"
     }
     
-    public init() {}
+    public init(wrappedValue: Related? = nil, key: String = "") {
+        self.wrappedValue = wrappedValue
+        self.key = key
+    }
+    
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
-    public init(from decoder: Decoder) throws {}
+    public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -60,7 +72,10 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: [Related] = []
     public var key: String = ""
     public var relatedModelType: any Model.Type { Related.self }
-    public init() {}
+    public init(wrappedValue: [Related] = [], pivotTable: String) {
+        self.wrappedValue = wrappedValue
+        self.key = pivotTable
+    }
     
     public func guessKey(parentTable: String) -> String {
         return "id"
@@ -71,7 +86,7 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws {}
+    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -80,14 +95,17 @@ public final class HasManyThrough<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: [Related] = []
     public var key: String = ""
     public var relatedModelType: any Model.Type { Related.self }
-    public init() {}
+    public init(wrappedValue: [Related] = [], key: String = "") {
+        self.wrappedValue = wrappedValue
+        self.key = key
+    }
     
     public func guessKey(parentTable: String) -> String {
         return key.isEmpty ? "\(parentTable.singularized)_id" : key
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws {}
+    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -96,14 +114,17 @@ public final class HasOneThrough<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: Related?
     public var key: String = ""
     public var relatedModelType: any Model.Type { Related.self }
-    public init() {}
+    public init(wrappedValue: Related? = nil, key: String = "") {
+        self.wrappedValue = wrappedValue
+        self.key = key
+    }
     
     public func guessKey(parentTable: String) -> String {
         return key.isEmpty ? "\(parentTable.singularized)_id" : key
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
-    public init(from decoder: Decoder) throws {}
+    public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -112,8 +133,11 @@ public final class MorphMany<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: [Related] = []
     public var key: String
     public var relatedModelType: any Model.Type { Related.self }
-    public init(_ name: String) { self.key = name }
     
+    public init(wrappedValue: [Related] = [], _ name: String) {
+        self.wrappedValue = wrappedValue
+        self.key = name
+    }
     public func guessKey(parentTable: String) -> String {
         return "\(key)_id"
     }
@@ -122,7 +146,7 @@ public final class MorphMany<Related: Model>: BoltRelation, Codable {
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.key = "" }
+    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -131,7 +155,10 @@ public final class MorphOne<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: Related?
     public var key: String
     public var relatedModelType: any Model.Type { Related.self }
-    public init(_ name: String) { self.key = name }
+    public init(wrappedValue: Related? = nil, _ name: String) {
+        self.wrappedValue = wrappedValue
+        self.key = name
+    }
     
     public func guessKey(parentTable: String) -> String {
         return "\(key)_id"
@@ -141,7 +168,7 @@ public final class MorphOne<Related: Model>: BoltRelation, Codable {
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
-    public init(from decoder: Decoder) throws { self.key = "" }
+    public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -150,14 +177,18 @@ public final class MorphTo<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: Related?
     public var key: String
     public var relatedModelType: any Model.Type { Related.self }
-    public init(_ name: String) { self.key = name }
+    
+    public init(wrappedValue: Related? = nil, _ name: String) {
+        self.wrappedValue = wrappedValue
+        self.key = name
+    }
     
     public func guessKey(parentTable: String) -> String {
         return "id"
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
-    public init(from decoder: Decoder) throws { self.key = "" }
+    public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -166,7 +197,10 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: [Related] = []
     public var key: String
     public var relatedModelType: any Model.Type { Related.self }
-    public init(_ name: String) { self.key = name }
+    public init(wrappedValue: [Related] = [], _ name: String) {
+        self.wrappedValue = wrappedValue
+        self.key = name
+    }
     
     public func guessKey(parentTable: String) -> String {
         return "id"
@@ -180,7 +214,7 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.key = "" }
+    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -189,7 +223,10 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: [Related] = []
     public var key: String
     public var relatedModelType: any Model.Type { Related.self }
-    public init(_ name: String) { self.key = name }
+    public init(wrappedValue: [Related] = [], _ name: String) {
+        self.wrappedValue = wrappedValue
+        self.key = name
+    }
     
     public func guessKey(parentTable: String) -> String {
         return "id"
@@ -203,6 +240,6 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.key = "" }
+    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
     public func encode(to encoder: Encoder) throws {}
 }
