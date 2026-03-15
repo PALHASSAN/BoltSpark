@@ -243,16 +243,12 @@ extension QueryBuilder {
 
 extension QueryBuilder {
     private func performEagerLoading(on models: inout [T]) throws {
+        guard let firstModel = models.first else { return }
+        
         let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
 
-        let size = MemoryLayout<T>.size
-        let alignment = MemoryLayout<T>.alignment
-        let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
-        pointer.initializeMemory(as: UInt8.self, repeating: 0, count: size)
-        
-        let template = pointer.assumingMemoryBound(to: T.self).pointee
-        let templateMirror = Mirror(reflecting: template)
+        let templateMirror = Mirror(reflecting: firstModel)
 
         var groupedRelations: [String: [String]] = [:]
         for path in eagerLoads {
@@ -266,14 +262,23 @@ extension QueryBuilder {
 
         for (relationName, nestedPaths) in groupedRelations {
             guard let child = templateMirror.children.first(where: {
-                $0.label?.replacingOccurrences(of: "_", with: "") == relationName
-            }), let templateRelation = child.value as? BoltRelation else { continue }
+                let cleanedLabel = $0.label?.replacingOccurrences(of: "_", with: "")
+                return cleanedLabel == relationName
+            }), let templateRelation = child.value as? BoltRelation else {
+                continue
+            }
 
             let relatedType = templateRelation.relatedModelType
-            try openAndLoad(relatedType, models: &models, relation: templateRelation, relationName: relationName, parentIds: parentIds, nested: nestedPaths)
+            
+            try openAndLoad(
+                relatedType,
+                models: &models,
+                relation: templateRelation,
+                relationName: relationName,
+                parentIds: parentIds,
+                nested: nestedPaths
+            )
         }
-        
-        pointer.deallocate()
     }
     
     private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
