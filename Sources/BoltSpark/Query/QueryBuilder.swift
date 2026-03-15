@@ -239,31 +239,35 @@ extension QueryBuilder {
     private func performEagerLoading(on models: inout [T]) throws {
         let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
- 
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let template = try? decoder.decode(T.self, from: "{}".data(using: .utf8)!) else { return }
+
+        let size = MemoryLayout<T>.size
+        let alignment = MemoryLayout<T>.alignment
+        let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
+        pointer.initializeMemory(as: UInt8.self, repeating: 0, count: size)
         
+        let template = pointer.assumingMemoryBound(to: T.self).pointee
         let templateMirror = Mirror(reflecting: template)
-        
+
         var groupedRelations: [String: [String]] = [:]
         for path in eagerLoads {
             let parts = path.split(separator: ".")
             let root = String(parts[0])
             let remaining = parts.dropFirst().map(String.init).joined(separator: ".")
-            
+
             if groupedRelations[root] == nil { groupedRelations[root] = [] }
             if !remaining.isEmpty { groupedRelations[root]?.append(remaining) }
         }
-        
+
         for (relationName, nestedPaths) in groupedRelations {
             guard let child = templateMirror.children.first(where: {
                 $0.label?.replacingOccurrences(of: "_", with: "") == relationName
             }), let templateRelation = child.value as? BoltRelation else { continue }
-            
+
             let relatedType = templateRelation.relatedModelType
             try openAndLoad(relatedType, models: &models, relation: templateRelation, relationName: relationName, parentIds: parentIds, nested: nestedPaths)
         }
+        
+        pointer.deallocate()
     }
     
     private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
