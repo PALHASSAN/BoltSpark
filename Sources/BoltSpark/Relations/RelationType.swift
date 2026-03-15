@@ -66,6 +66,10 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         return "id"
     }
     
+    public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
+        (table: key, parentKey: "\(parentTable.singularized)_id", relatedKey: "\(Related.tableName.singularized)_id")
+    }
+    
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
     public init(from decoder: Decoder) throws {}
     public func encode(to encoder: Encoder) throws {}
@@ -167,6 +171,13 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     public func guessKey(parentTable: String) -> String {
         return "id"
     }
+    public func extraConditions(parentTable: String) -> [String: Any] {
+        return ["\(key)_type": parentTable.singularized]
+    }
+    
+    public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
+        (table: "\(key)s", parentKey: "\(key)_id", relatedKey: "\(Related.tableName.singularized)_id")
+    }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
     public init(from decoder: Decoder) throws { self.key = "" }
@@ -185,6 +196,10 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     }
     public func extraConditions(parentTable: String) -> [String: Any] {
         return ["\(key)_type": Related.tableName.singularized]
+    }
+    
+    public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
+        (table: "\(key)s", parentKey: "\(parentTable.singularized)_id", relatedKey: "\(key)_id")
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }

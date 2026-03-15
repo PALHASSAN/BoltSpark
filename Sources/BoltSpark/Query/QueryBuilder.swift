@@ -252,42 +252,65 @@ extension QueryBuilder {
         
         for (relationName, nestedPaths) in groupedRelations {
             let mirror = Mirror(reflecting: models[0])
-            
             guard let child = mirror.children.first(where: {
                 $0.label?.replacingOccurrences(of: "_", with: "") == relationName
             }), let relation = child.value as? BoltRelation else { continue }
             
             let relatedType = relation.relatedModelType
+            try openAndLoad(relatedType, models: &models, relation: relation, parentIds: parentIds, nested: nestedPaths)
+        }
+    }
+    
+    private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, parentIds: [Int64], nested: [String]) throws {
+        let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
+        var sql = ""
+        var args: [Any] = parentIds
+        
+        if let pivot = relation.pivotConfig(parentTable: T.tableName) {
+            sql = "SELECT \(M.tableName).*, \(pivot.table).\(pivot.parentKey) as pivot_parent_id FROM \(M.tableName) INNER JOIN \(pivot.table) ON \(M.tableName).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) IN (\(placeholders))"
+            
+            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+                sql += " AND \(pivot.table).\(col) = ?"
+                args.append(val)
+            }
+        } else {
             let foreignKey = relation.guessKey(parentTable: T.tableName)
-            let extras = relation.extraConditions(parentTable: T.tableName)
+            sql = "SELECT * FROM \(M.tableName) WHERE \(foreignKey) IN (\(placeholders))"
             
-            let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
-            var sql = "SELECT * FROM \(relatedType.tableName) WHERE \(foreignKey) IN (\(placeholders))"
-            var queryArgs: [Any] = parentIds
-            
-            for (column, value) in extras {
-                sql += " AND \(column) = ?"
-                queryArgs.append(value)
+            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+                sql += " AND \(col) = ?"
+                args.append(val)
             }
+        }
+        
+        let driver = try BoltSpark.driver(for: M.databaseName)
+        let rawData = try driver.fetch(sql, arguments: args)
+        
+        var uniqueModelsMap: [Int64: M] = [:]
+        let allMappedModels = try ModelMapper.map(rawData, to: M.self)
+        for model in allMappedModels {
+            if let id = model.idValue { uniqueModelsMap[id] = model }
+        }
+        var relatedModels = Array(uniqueModelsMap.values)
+        
+        if !nested.isEmpty && !relatedModels.isEmpty {
+            var erased = relatedModels as [any Model]
+            try eagerLoadNested(models: &erased, type: M.self, relations: nested)
+            relatedModels = erased.compactMap { $0 as? M }
+        }
+        
+        for i in 0..<models.count {
+            let pid = models[i].idValue
             
-            let driver = try BoltSpark.driver(for: relatedType.databaseName)
-            let rawRelatedData = try driver.fetch(sql, arguments: queryArgs)
-            
-            var allRelatedModels = try ModelMapper.map(rawRelatedData, to: relatedType) as [any Model]
-            
-            if !nestedPaths.isEmpty && !allRelatedModels.isEmpty {
-                try eagerLoadNested(models: &allRelatedModels, type: relatedType, relations: nestedPaths)
-            }
-            
-            for i in 0..<models.count {
-                let parentId = models[i].idValue
-                
-                let filteredChildren = allRelatedModels.filter { childInstance in
-                    let childMirror = Mirror(reflecting: childInstance)
-                    return childMirror.children.contains { childAttr in
-                        let swiftLabel = childAttr.label?.toSnakeCase() ?? ""
-                        return swiftLabel == foreignKey && (childAttr.value as? Int64) == parentId
-                    }
+            if relation.pivotConfig(parentTable: T.tableName) != nil {
+                let childIds = rawData.filter { ($0["pivot_parent_id"] as? Int64) == pid }.compactMap { $0["id"] as? Int64 }
+                let filteredChildren = relatedModels.filter { childIds.contains($0.idValue ?? -1) }
+                relation.setRelationData(filteredChildren)
+            } else {
+                let foreignKey = relation.guessKey(parentTable: T.tableName)
+                let filteredChildren = relatedModels.filter { child in
+                    let m = Mirror(reflecting: child)
+                    return m.children.contains { ($0.label?.toSnakeCase() == foreignKey) && ($0.value as? Int64 == pid) }
                 }
                 relation.setRelationData(filteredChildren)
             }
@@ -295,7 +318,7 @@ extension QueryBuilder {
     }
     
     private func eagerLoadNested(models: inout [any Model], type: any Model.Type, relations: [String]) throws {
-        func openAndLoad<M: Model>(_ type: M.Type, models: inout [any Model], relations: [String]) throws {
+        func openAndLoadInner<M: Model>(_ type: M.Type, models: inout [any Model], relations: [String]) throws {
             var typedModels = models.compactMap { $0 as? M }
             if typedModels.isEmpty { return }
             
@@ -305,8 +328,7 @@ extension QueryBuilder {
             
             models = typedModels
         }
-        
-        try openAndLoad(type, models: &models, relations: relations)
+        try openAndLoadInner(type, models: &models, relations: relations)
     }
 }
 
@@ -344,23 +366,31 @@ extension QueryBuilder {
     
     private func buildHasCondition(relationName: String, isExists: Bool, subQuerySql: String? = nil, subQueryArgs: [Any] = []) -> Self {
         let mirror = Mirror(reflecting: T.self)
-        
         guard let child = mirror.children.first(where: {
             $0.label?.replacingOccurrences(of: "_", with: "") == relationName
         }), let relation = child.value as? BoltRelation else { return self }
         
         let relatedTable = relation.relatedModelType.tableName
-        let foreignKey = relation.guessKey(parentTable: T.tableName)
-        let extras = relation.extraConditions(parentTable: T.tableName)
-        
         let existsKeyword = isExists ? "EXISTS" : "NOT EXISTS"
-        var sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) WHERE \(relatedTable).\(foreignKey) = \(T.tableName).id"
+        var sql = ""
         
-        for (col, val) in extras {
-            sql += " AND \(relatedTable).\(col) = ?"
-            self.arguments.append(val)
+        if let pivot = relation.pivotConfig(parentTable: T.tableName) {
+            sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) INNER JOIN \(pivot.table) ON \(relatedTable).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) = \(T.tableName).id"
+            
+            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+                sql += " AND \(pivot.table).\(col) = ?"
+                self.arguments.append(val)
+            }
+        } else {
+            let foreignKey = relation.guessKey(parentTable: T.tableName)
+            sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) WHERE \(relatedTable).\(foreignKey) = \(T.tableName).id"
+            
+            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+                sql += " AND \(relatedTable).\(col) = ?"
+                self.arguments.append(val)
+            }
         }
-    
+        
         if let subSql = subQuerySql, !subSql.isEmpty {
             sql += " AND \(subSql)"
             self.arguments.append(contentsOf: subQueryArgs)
@@ -372,7 +402,7 @@ extension QueryBuilder {
         return self
     }
     
-    func buildConditionsOnly() -> (sql: String, arguments: [Any]) {
+    public func buildConditionsOnly() -> (sql: String, arguments: [Any]) {
         if wheres.isEmpty { return ("", []) }
         var sql = ""
         for (index, condition) in wheres.enumerated() {
