@@ -291,8 +291,8 @@ extension QueryBuilder {
             
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
                 if val.hasPrefix("LIKE ") {
-                    let pureValue = val.replacingOccurrences(of: "LIKE ", with: "")
-                    sql += " AND \(pivot.table).\(col) LIKE ?"; args.append(pureValue)
+                    sql += " AND \(pivot.table).\(col) LIKE ?"
+                    args.append(val.replacingOccurrences(of: "LIKE ", with: ""))
                 } else {
                     sql += " AND \(pivot.table).\(col) = ?"; args.append(val)
                 }
@@ -303,15 +303,14 @@ extension QueryBuilder {
             
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
                 if val.hasPrefix("LIKE ") {
-                    let pureValue = val.replacingOccurrences(of: "LIKE ", with: "")
-                    sql += " AND \(col) LIKE ?"; args.append(pureValue)
+                    sql += " AND \(col) LIKE ?"
+                    args.append(val.replacingOccurrences(of: "LIKE ", with: ""))
                 } else {
                     sql += " AND \(col) = ?"; args.append(val)
                 }
             }
         }
 
-        
         let driver = try BoltSpark.driver(for: M.databaseName)
         let rawData = try driver.fetch(sql, arguments: args)
         let relatedModels = try ModelMapper.map(rawData, to: M.self)
@@ -323,22 +322,41 @@ extension QueryBuilder {
             finalRelatedModels = erased.compactMap { $0 as? M }
         }
         
+        guard let firstModel = models.first else { return }
+        let firstMirror = Mirror(reflecting: firstModel)
+        let relationLabel = firstMirror.children.first {
+            $0.label?.replacingOccurrences(of: "_", with: "") == relationName
+        }?.label
+
         for i in 0..<models.count {
             let pid = models[i].idValue
             
-            let m = Mirror(reflecting: models[i])
-            if let child = m.children.first(where: { $0.label?.replacingOccurrences(of: "_", with: "") == relationName }),
+            let currentMirror = Mirror(reflecting: models[i])
+            if let label = relationLabel,
+               let child = currentMirror.children.first(where: { $0.label == label }),
                let modelRelation = child.value as? BoltRelation {
                 
                 if relation.pivotConfig(parentTable: T.tableName) != nil {
-                    let childIds = rawData.filter { ($0["pivot_parent_id"] as? Int64) == pid }.compactMap { $0["id"] as? Int64 }
+                    let childIds = rawData.filter { item in
+                        let dbId = (item["pivot_parent_id"] as? Int64) ??
+                                   (item["pivot_parent_id"] as? Int).map { Int64($0) } ??
+                                   (item["pivot_parent_id"] as? Int32).map { Int64($0) }
+                        return dbId == pid
+                    }.compactMap {
+                        ($0["id"] as? Int64) ?? ($0["id"] as? Int).map { Int64($0) }
+                    }
+                    
                     let filtered = finalRelatedModels.filter { childIds.contains($0.idValue ?? -1) }
                     modelRelation.setRelationData(filtered)
                 } else {
+                    // العلاقات العادية (HasMany)
                     let foreignKey = relation.guessKey(parentTable: T.tableName)
                     let filtered = finalRelatedModels.filter { child in
                         let cm = Mirror(reflecting: child)
-                        return cm.children.contains { $0.label?.toSnakeCase() == foreignKey && ($0.value as? Int64) == pid }
+                        return cm.children.contains {
+                            $0.label?.toSnakeCase() == foreignKey &&
+                            (($0.value as? Int64) == pid || ($0.value as? Int).map { Int64($0) } == pid)
+                        }
                     }
                     modelRelation.setRelationData(filtered)
                 }
