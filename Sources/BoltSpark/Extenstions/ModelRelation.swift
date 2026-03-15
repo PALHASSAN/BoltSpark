@@ -36,14 +36,11 @@ extension Model {
         foreignPivotKey: String? = nil,
         relatedPivotKey: String? = nil
     ) -> BelongsToMany<T> {
-        let table1 = Self.tableName.singularized
-        let table2 = T.tableName.singularized
-        
-        let pivotTable = pivot ?? [table1, table2].sorted().joined(separator: "_")
-        
-        let relation = BelongsToMany<T>()
-        relation.key = pivotTable
-        return relation
+        return BelongsToMany<T>(
+            pivotTable: pivot ?? "",
+            foreignKey: foreignPivotKey,
+            relatedKey: relatedPivotKey
+        )
     }
     
     // MARK: - Relationships Through

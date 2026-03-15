@@ -69,24 +69,45 @@ public final class BelongsTo<Related: Model>: BoltRelation, Codable {
 
 @propertyWrapper
 public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
-    public var wrappedValue: [Related] = []
-    public var key: String = ""
+    public var wrappedValue: [Related]
+    public var key: String
+    public var foreignKey: String?
+    public var relatedKey: String?
+    
     public var relatedModelType: any Model.Type { Related.self }
-    public init(wrappedValue: [Related] = [], pivotTable: String) {
+
+    public init(wrappedValue: [Related] = [], pivotTable: String = "", foreignKey: String? = nil, relatedKey: String? = nil) {
         self.wrappedValue = wrappedValue
         self.key = pivotTable
+        self.foreignKey = foreignKey
+        self.relatedKey = relatedKey
     }
-    
-    public func guessKey(parentTable: String) -> String {
-        return "id"
-    }
-    
+
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
-        (table: key, parentKey: "\(parentTable.singularized)_id", relatedKey: "\(Related.tableName.singularized)_id")
+        let actualTable: String
+        if !key.isEmpty {
+            actualTable = key
+        } else {
+            let p = parentTable.singularized
+            let r = Related.tableName.singularized
+            actualTable = [p, r].sorted().joined(separator: "_")
+        }
+        
+        let pk = foreignKey ?? "\(parentTable.singularized)_id"
+        let rk = relatedKey ?? "\(Related.tableName.singularized)_id"
+        
+        return (table: actualTable, parentKey: pk, relatedKey: rk)
     }
     
+    public func guessKey(parentTable: String) -> String { return "id" }
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
+    
+    public init(from decoder: Decoder) throws {
+        self.wrappedValue = []
+        self.key = ""
+        self.foreignKey = nil
+        self.relatedKey = nil
+    }
     public func encode(to encoder: Encoder) throws {}
 }
 
