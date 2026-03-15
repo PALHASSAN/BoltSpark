@@ -246,9 +246,12 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
 public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     public var wrappedValue: [Related] = []
     public var key: String
+    public var pivotTable: String?
+    
     public var relatedModelType: any Model.Type { Related.self }
-    public init(wrappedValue: [Related] = [], _ name: String) {
+    public init(wrappedValue: [Related] = [], pivotTable: String? = nil, _ name: String) {
         self.wrappedValue = wrappedValue
+        self.pivotTable = pivotTable
         self.key = name
     }
     
@@ -256,11 +259,15 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
         return "id"
     }
     public func extraConditions(parentTable: String) -> [String: Any] {
-        return ["\(key)_type": Related.tableName.singularized]
+        return ["\(key)_type": Related.tableName.singularized.capitalized]
     }
     
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
-        (table: "\(key)s", parentKey: "\(parentTable.singularized)_id", relatedKey: "\(key)_id")
+        let table = self.pivotTable ?? "\(Related.tableName.singularized)_links"
+        let parentKey = "\(key)_id"
+        let relatedKey = "\(Related.tableName.singularized)_id"
+                
+        return (table: table, parentKey: parentKey, relatedKey: relatedKey)
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
