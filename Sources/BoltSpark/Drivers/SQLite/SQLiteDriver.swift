@@ -64,15 +64,23 @@ public final class SQLiteDriver: DatabaseDriver, @unchecked Sendable {
         return results
     }
     
+    private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     private func bind(_ args: [Any], to statement: OpaquePointer?) throws {
         for (index, arg) in args.enumerated() {
             let pos = Int32(index + 1)
+            
             if let str = arg as? String {
-                sqlite3_bind_text(statement, pos, str, -1, nil)
+                sqlite3_bind_text(statement, pos, str, -1, SQLITE_TRANSIENT)
             } else if let int = arg as? Int64 {
                 sqlite3_bind_int64(statement, pos, int)
+            } else if let int = arg as? Int {
+                sqlite3_bind_int64(statement, pos, Int64(int))
             } else if let double = arg as? Double {
                 sqlite3_bind_double(statement, pos, double)
+            } else if let bool = arg as? Bool {
+                sqlite3_bind_int64(statement, pos, bool ? 1 : 0)
+            } else {
+                sqlite3_bind_null(statement, pos)
             }
         }
     }
