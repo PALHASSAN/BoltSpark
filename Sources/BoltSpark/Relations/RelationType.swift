@@ -162,8 +162,8 @@ public final class MorphMany<Related: Model>: BoltRelation, Codable {
     public func guessKey(parentTable: String) -> String {
         return "\(key)_id"
     }
-    public func extraConditions(parentTable: String) -> [String: Any] {
-        return ["\(key)_type": parentTable.singularized]
+    public func extraConditions(parentTable: String) -> [String: String] {
+        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
@@ -184,8 +184,8 @@ public final class MorphOne<Related: Model>: BoltRelation, Codable {
     public func guessKey(parentTable: String) -> String {
         return "\(key)_id"
     }
-    public func extraConditions(parentTable: String) -> [String: Any] {
-        return ["\(key)_type": parentTable.singularized]
+    public func extraConditions(parentTable: String) -> [String: String] {
+        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
@@ -227,8 +227,8 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     }
 
     public func guessKey(parentTable: String) -> String { return "id" }
-    public func extraConditions(parentTable: String) -> [String: Any] {
-        return ["\(key)_type": parentTable.singularized.capitalized]
+    public func extraConditions(parentTable: String) -> [String: String] {
+        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
     }
 
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
@@ -258,8 +258,8 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     public func guessKey(parentTable: String) -> String {
         return "id"
     }
-    public func extraConditions(parentTable: String) -> [String: Any] {
-        return ["\(key)_type": Related.tableName.singularized.capitalized]
+    public func extraConditions(parentTable: String) -> [String: String] {
+        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
     }
     
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {

@@ -14,12 +14,12 @@ public protocol BoltRelation {
     func setRelationData(_ data: Any)
     
     func guessKey(parentTable: String) -> String
-    func extraConditions(parentTable: String) -> [String: Any]
+    func extraConditions(parentTable: String) -> [String: String]
     
     func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)?
 }
 
 extension BoltRelation {
-    public func extraConditions(parentTable: String) -> [String: Any] { return [:] }
+    public func extraConditions(parentTable: String) -> [String: String] { return [:] }
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? { nil }
 }
