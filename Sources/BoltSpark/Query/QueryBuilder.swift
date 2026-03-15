@@ -239,8 +239,11 @@ extension QueryBuilder {
     private func performEagerLoading(on models: inout [T]) throws {
         let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
+ 
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let template = try? decoder.decode(T.self, from: "{}".data(using: .utf8)!) else { return }
         
-        let template = unsafeBitCast(MemoryLayout<T>.size, to: T.self)
         let templateMirror = Mirror(reflecting: template)
         
         var groupedRelations: [String: [String]] = [:]
