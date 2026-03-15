@@ -238,7 +238,12 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     }
 
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = ""; self.pivotTable = "" }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.wrappedValue = (try? container.decode([Related].self)) ?? []
+        self.key = ""
+        self.pivotTable = ""
+    }
     public func encode(to encoder: Encoder) throws {}
 }
 

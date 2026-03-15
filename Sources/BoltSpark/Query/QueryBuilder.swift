@@ -155,6 +155,12 @@ public class QueryBuilder<T: Model> {
     }
     
     @discardableResult
+    public func with(_ relations: String...) -> Self {
+        self.eagerLoads.append(contentsOf: relations)
+        return self
+    }
+    
+    @discardableResult
     public func with(_ relations: [String]) -> Self {
         self.eagerLoads.append(contentsOf: relations)
         return self
@@ -272,21 +278,34 @@ extension QueryBuilder {
     
     private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
         let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
-        var sql = ""
         var args: [Any] = parentIds
+        var sql = ""
         
         if let pivot = relation.pivotConfig(parentTable: T.tableName) {
             sql = "SELECT \(M.tableName).*, \(pivot.table).\(pivot.parentKey) as pivot_parent_id FROM \(M.tableName) INNER JOIN \(pivot.table) ON \(M.tableName).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) IN (\(placeholders))"
+            
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                sql += " AND \(pivot.table).\(col) = ?"; args.append(val)
+                if val.hasPrefix("LIKE ") {
+                    let pureValue = val.replacingOccurrences(of: "LIKE ", with: "")
+                    sql += " AND \(pivot.table).\(col) LIKE ?"; args.append(pureValue)
+                } else {
+                    sql += " AND \(pivot.table).\(col) = ?"; args.append(val)
+                }
             }
         } else {
             let foreignKey = relation.guessKey(parentTable: T.tableName)
             sql = "SELECT * FROM \(M.tableName) WHERE \(foreignKey) IN (\(placeholders))"
+            
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                sql += " AND \(col) = ?"; args.append(val)
+                if val.hasPrefix("LIKE ") {
+                    let pureValue = val.replacingOccurrences(of: "LIKE ", with: "")
+                    sql += " AND \(col) LIKE ?"; args.append(pureValue)
+                } else {
+                    sql += " AND \(col) = ?"; args.append(val)
+                }
             }
         }
+
         
         let driver = try BoltSpark.driver(for: M.databaseName)
         let rawData = try driver.fetch(sql, arguments: args)
@@ -383,8 +402,14 @@ extension QueryBuilder {
             sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) INNER JOIN \(pivot.table) ON \(relatedTable).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) = \(T.tableName).id"
             
             for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                sql += " AND \(pivot.table).\(col) = ?"
-                self.arguments.append(val)
+                if val.hasPrefix("LIKE ") {
+                    let pureValue = val.replacingOccurrences(of: "LIKE ", with: "")
+                    sql += " AND \(pivot.table).\(col) LIKE ?"
+                    self.arguments.append(pureValue)
+                } else {
+                    sql += " AND \(pivot.table).\(col) = ?"
+                    self.arguments.append(val)
+                }
             }
         } else {
             let foreignKey = relation.guessKey(parentTable: T.tableName)
