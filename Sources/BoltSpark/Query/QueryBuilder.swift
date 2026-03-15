@@ -309,3 +309,75 @@ extension QueryBuilder {
         try openAndLoad(type, models: &models, relations: relations)
     }
 }
+
+// MARK: Has Extension
+extension QueryBuilder {
+    @discardableResult
+    public func has(_ relationName: String) -> Self {
+        return buildHasCondition(relationName: relationName, isExists: true)
+    }
+    
+    @discardableResult
+    public func doesntHave(_ relationName: String) -> Self {
+        return buildHasCondition(relationName: relationName, isExists: false)
+    }
+    
+    @discardableResult
+    public func whereHas(_ relationName: String, closure: (QueryBuilder<T>) -> Void) -> Self {
+        let subQuery = QueryBuilder<T>()
+        closure(subQuery)
+        
+        let (subSql, subArgs) = subQuery.buildConditionsOnly()
+        
+        return buildHasCondition(relationName: relationName, isExists: true, subQuerySql: subSql, subQueryArgs: subArgs)
+    }
+    
+    @discardableResult
+    public func whereDoesntHave(_ relationName: String, closure: (QueryBuilder<T>) -> Void) -> Self {
+        let subQuery = QueryBuilder<T>()
+        closure(subQuery)
+        
+        let (subSql, subArgs) = subQuery.buildConditionsOnly()
+        
+        return buildHasCondition(relationName: relationName, isExists: false, subQuerySql: subSql, subQueryArgs: subArgs)
+    }
+    
+    private func buildHasCondition(relationName: String, isExists: Bool, subQuerySql: String? = nil, subQueryArgs: [Any] = []) -> Self {
+        let mirror = Mirror(reflecting: T.self)
+        
+        guard let child = mirror.children.first(where: {
+            $0.label?.replacingOccurrences(of: "_", with: "") == relationName
+        }), let relation = child.value as? BoltRelation else { return self }
+        
+        let relatedTable = relation.relatedModelType.tableName
+        let foreignKey = relation.guessKey(parentTable: T.tableName)
+        let extras = relation.extraConditions(parentTable: T.tableName)
+        
+        let existsKeyword = isExists ? "EXISTS" : "NOT EXISTS"
+        var sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) WHERE \(relatedTable).\(foreignKey) = \(T.tableName).id"
+        
+        for (col, val) in extras {
+            sql += " AND \(relatedTable).\(col) = ?"
+            self.arguments.append(val)
+        }
+    
+        if let subSql = subQuerySql, !subSql.isEmpty {
+            sql += " AND \(subSql)"
+            self.arguments.append(contentsOf: subQueryArgs)
+        }
+        
+        sql += ")"
+        self.wheres.append((sql, "AND"))
+        
+        return self
+    }
+    
+    func buildConditionsOnly() -> (sql: String, arguments: [Any]) {
+        if wheres.isEmpty { return ("", []) }
+        var sql = ""
+        for (index, condition) in wheres.enumerated() {
+            sql += index == 0 ? condition.sql : " \(condition.connector) \(condition.sql)"
+        }
+        return (sql, arguments)
+    }
+}

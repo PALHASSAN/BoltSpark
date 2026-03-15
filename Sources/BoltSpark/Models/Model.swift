@@ -145,3 +145,26 @@ extension Model {
         return query().onlyTrashed()
     }
 }
+
+// MARK: Has
+extension Model {
+    @discardableResult
+    public static func has(_ relationName: String) -> QueryBuilder<Self> {
+        return query().has(relationName)
+    }
+    
+    @discardableResult
+    public static func doesntHave(_ relationName: String) -> QueryBuilder<Self> {
+        return query().doesntHave(relationName)
+    }
+    
+    @discardableResult
+    public static func whereHas(_ relationName: String, _ closure: @escaping (QueryBuilder<Self>) -> Void) -> QueryBuilder<Self> {
+        return query().whereHas(relationName, closure: closure)
+    }
+    
+    @discardableResult
+    public static func whereDoesntHave(_ relationName: String, _ closure: @escaping (QueryBuilder<Self>) -> Void) -> QueryBuilder<Self> {
+        return query().whereDoesntHave(relationName, closure: closure)
+    }
+}
