@@ -205,7 +205,7 @@ public final class MorphTo<Related: Model>: BoltRelation, Codable {
     }
     
     public func guessKey(parentTable: String) -> String {
-        return "id"
+        return "\(key)_id"
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
@@ -232,8 +232,8 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     }
 
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
-        let parentKey = "\(key)_id"
-        let relatedKey = "\(Related.tableName.singularized)_id"
+        let parentKey = "\(parentTable.singularized)_id"
+        let relatedKey = "\(key)_id"
         return (table: pivotTable, parentKey: parentKey, relatedKey: relatedKey)
     }
 
@@ -259,7 +259,7 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
         return "id"
     }
     public func extraConditions(parentTable: String) -> [String: String] {
-        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
+        return ["\(key)_type": "LIKE %\(Related.tableName.singularized.capitalized)"]
     }
     
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
