@@ -77,12 +77,8 @@ extension Model {
         return MorphTo<T>(name)
     }
     
-    public func morphToMany<T: Model>(name: String, table: String? = nil) -> MorphToMany<T> {
-        let relation = MorphToMany<T>(name)
-        if let table = table {
-            relation.key = table
-        }
-        return relation
+    public func morphToMany<T: Model>(name: String, pivotTable: String) -> MorphToMany<T> {
+        return MorphToMany<T>(pivotTable: pivotTable, name: name)
     }
     
     public func morphedByMany<T: Model>(name: String, table: String? = nil) -> MorphedByMany<T> {
