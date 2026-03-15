@@ -53,8 +53,23 @@ public class ModelMapper {
         
         do {
             return try decoder.decode([T].self, from: jsonData)
+        } catch let DecodingError.keyNotFound(key, context) {
+            let msg = "🚨 BoltSpark: العمود '\(key.stringValue)' غير موجود في الداتا بيس، لكنه مكتوب في موديل \(T.self)"
+            print(msg)
+            throw BoltError.mappingError(msg)
+        } catch let DecodingError.valueNotFound(type, context) {
+            let key = context.codingPath.last?.stringValue ?? ""
+            let msg = "🚨 BoltSpark: العمود '\(key)' قيمته NULL في الداتا بيس."
+            print(msg)
+            throw BoltError.mappingError(msg)
+        } catch let DecodingError.typeMismatch(type, context) {
+            let key = context.codingPath.last?.stringValue ?? ""
+            let msg = "🚨 BoltSpark: نوع البيانات للعمود '\(key)' خطأ! المتوقع (\(type))"
+            print(msg)
+            throw BoltError.mappingError(msg)
         } catch {
-            throw BoltError.mappingError("🧩 BoltSpark Mapping Failed: \(T.self) - \(error.localizedDescription)")
+            print("🚨 BoltSpark خطأ عام: \(error)")
+            throw BoltError.mappingError(error.localizedDescription)
         }
     }
 }
