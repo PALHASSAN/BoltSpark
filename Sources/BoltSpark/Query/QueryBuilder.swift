@@ -103,7 +103,13 @@ public class QueryBuilder<T: Model> {
         var models = try ModelMapper.map(rawData, to: T.self)
         
         if !eagerLoads.isEmpty && !models.isEmpty {
-            try performEagerLoading(on: &models)
+            do {
+                try performEagerLoading(on: &models)
+            } catch {
+                #if DEBUG
+                print("⚠️ BoltSpark Eager Loading failed: \(error)")
+                #endif
+            }
         }
         return models
     }
@@ -286,42 +292,27 @@ extension QueryBuilder {
         var args: [Any] = parentIds
         var sql = ""
         
-        if let pivot = relation.pivotConfig(parentTable: T.tableName) {
-            sql = "SELECT \(M.tableName).*, \(pivot.table).\(pivot.parentKey) as pivot_parent_id FROM \(M.tableName) INNER JOIN \(pivot.table) ON \(M.tableName).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) IN (\(placeholders))"
-            
-            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                if val.hasPrefix("LIKE ") {
-                    sql += " AND \(pivot.table).\(col) LIKE ?"
-                    args.append(val.replacingOccurrences(of: "LIKE ", with: ""))
-                } else {
-                    sql += " AND \(pivot.table).\(col) = ?"; args.append(val)
-                }
-            }
-        } else {
-            let foreignKey = relation.guessKey(parentTable: T.tableName)
-            sql = "SELECT * FROM \(M.tableName) WHERE \(foreignKey) IN (\(placeholders))"
-            
-            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                if val.hasPrefix("LIKE ") {
-                    sql += " AND \(col) LIKE ?"
-                    args.append(val.replacingOccurrences(of: "LIKE ", with: ""))
-                } else {
-                    sql += " AND \(col) = ?"; args.append(val)
-                }
+        guard let pivot = relation.pivotConfig(parentTable: T.tableName) else { return }
+
+        sql = "SELECT \(M.tableName).*, \(pivot.table).\(pivot.parentKey) as pivot_parent_id " +
+              "FROM \(M.tableName) " +
+              "INNER JOIN \(pivot.table) ON \(M.tableName).id = \(pivot.table).\(pivot.relatedKey) " +
+              "WHERE \(pivot.table).\(pivot.parentKey) IN (\(placeholders))"
+        
+        for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+            if val.hasPrefix("LIKE ") {
+                sql += " AND \(pivot.table).\(col) LIKE ?"
+                args.append(val.replacingOccurrences(of: "LIKE ", with: ""))
+            } else {
+                sql += " AND \(pivot.table).\(col) = ?"; args.append(val)
             }
         }
 
         let driver = try BoltSpark.driver(for: M.databaseName)
         let rawData = try driver.fetch(sql, arguments: args)
-        let relatedModels = try ModelMapper.map(rawData, to: M.self)
         
-        var finalRelatedModels = relatedModels
-        if !nested.isEmpty && !finalRelatedModels.isEmpty {
-            var erased = finalRelatedModels as [any Model]
-            try eagerLoadNested(models: &erased, type: M.self, relations: nested)
-            finalRelatedModels = erased.compactMap { $0 as? M }
-        }
-        
+        let relatedModels = (try? ModelMapper.map(rawData, to: M.self)) ?? []
+
         guard let firstModel = models.first else { return }
         let firstMirror = Mirror(reflecting: firstModel)
         let relationLabel = firstMirror.children.first {
@@ -330,36 +321,21 @@ extension QueryBuilder {
 
         for i in 0..<models.count {
             let pid = models[i].idValue
-            
             let currentMirror = Mirror(reflecting: models[i])
+            
             if let label = relationLabel,
                let child = currentMirror.children.first(where: { $0.label == label }),
                let modelRelation = child.value as? BoltRelation {
                 
-                if relation.pivotConfig(parentTable: T.tableName) != nil {
-                    let childIds = rawData.filter { item in
-                        let dbId = (item["pivot_parent_id"] as? Int64) ??
-                                   (item["pivot_parent_id"] as? Int).map { Int64($0) } ??
-                                   (item["pivot_parent_id"] as? Int32).map { Int64($0) }
-                        return dbId == pid
-                    }.compactMap {
-                        ($0["id"] as? Int64) ?? ($0["id"] as? Int).map { Int64($0) }
-                    }
-                    
-                    let filtered = finalRelatedModels.filter { childIds.contains($0.idValue ?? -1) }
-                    modelRelation.setRelationData(filtered)
-                } else {
-                    // العلاقات العادية (HasMany)
-                    let foreignKey = relation.guessKey(parentTable: T.tableName)
-                    let filtered = finalRelatedModels.filter { child in
-                        let cm = Mirror(reflecting: child)
-                        return cm.children.contains {
-                            $0.label?.toSnakeCase() == foreignKey &&
-                            (($0.value as? Int64) == pid || ($0.value as? Int).map { Int64($0) } == pid)
-                        }
-                    }
-                    modelRelation.setRelationData(filtered)
+                let filteredRaw = rawData.filter { item in
+                    let dbId = (item["pivot_parent_id"] as? Int64) ??
+                               (item["pivot_parent_id"] as? Int).map { Int64($0) } ??
+                               (item["pivot_parent_id"] as? Int32).map { Int64($0) }
+                    return dbId == pid
                 }
+                
+                let filteredModels = (try? ModelMapper.map(filteredRaw, to: M.self)) ?? []
+                modelRelation.setRelationData(filteredModels)
             }
         }
     }
