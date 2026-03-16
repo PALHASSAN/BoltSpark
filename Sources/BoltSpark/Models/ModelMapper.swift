@@ -7,6 +7,8 @@
 
 import Foundation
 
+import Foundation
+
 public class ModelMapper {
     nonisolated(unsafe) private static var relationsCache: [String: [String]] = [:]
     private static let lock = NSLock()
@@ -28,7 +30,8 @@ public class ModelMapper {
             
             relationsCache[typeName] = mirror.children.compactMap { child in
                 if child.value is BoltRelation {
-                    return child.label?.replacingOccurrences(of: "_", with: "")
+                    // نُبقي الاسم كما هو دون تعديل لضمان المطابقة مع JSONDecoder
+                    return child.label
                 }
                 return nil
             }
@@ -49,10 +52,23 @@ public class ModelMapper {
 
         let jsonData = try JSONSerialization.data(withJSONObject: processedRows, options: [])
         let decoder = JSONDecoder()
+    
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         
         do {
             return try decoder.decode([T].self, from: jsonData)
+        } catch let DecodingError.keyNotFound(key, context) {
+            let errorMsg = "❌ Missing Key: '\(key.stringValue)' at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            print(errorMsg)
+            throw BoltError.mappingError(errorMsg)
+        } catch let DecodingError.valueNotFound(value, context) {
+            let errorMsg = "❌ Value Not Found (NULL where not allowed): \(value) at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            print(errorMsg)
+            throw BoltError.mappingError(errorMsg)
+        } catch let DecodingError.typeMismatch(type, context) {
+            let errorMsg = "❌ Type Mismatch: Expected \(type) at path: \(context.codingPath.map { $0.stringValue }.joined(separator: "."))"
+            print(errorMsg)
+            throw BoltError.mappingError(errorMsg)
         } catch {
             throw BoltError.mappingError("🧩 BoltSpark Mapping Failed: \(T.self) - \(error.localizedDescription)")
         }
