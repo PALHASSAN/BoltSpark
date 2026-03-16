@@ -30,8 +30,7 @@ public class ModelMapper {
             
             relationsCache[typeName] = mirror.children.compactMap { child in
                 if child.value is BoltRelation {
-                    // نُبقي الاسم كما هو دون تعديل لضمان المطابقة مع JSONDecoder
-                    return child.label
+                    return child.label?.replacingOccurrences(of: "_", with: "")
                 }
                 return nil
             }
@@ -44,7 +43,7 @@ public class ModelMapper {
             var newRow = row
             for key in relationKeys {
                 if newRow[key] == nil {
-                    newRow[key] = NSNull()
+                    newRow[key] = []
                 }
             }
             return newRow
