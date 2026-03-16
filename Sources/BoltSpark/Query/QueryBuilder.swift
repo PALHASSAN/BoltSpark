@@ -362,13 +362,13 @@ extension QueryBuilder {
     private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
         guard let pivot = relation.pivotConfig(parentTable: T.tableName) else { return }
         
-        let pivotDatabase = T.databaseName
-        let isSingleDatabase = (M.databaseName == pivotDatabase)
+        let pivotDB = pivot.database
+        let isSingleDatabase = (M.databaseName == pivotDB)
 
         if isSingleDatabase {
-            try performJoinLoad(type, models: &models, pivot: pivot, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
+            try performJoinLoad(type, models: &models, pivot: (pivot.table, pivot.parentKey, pivot.relatedKey), relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
         } else {
-            try performManualLoad(type, models: &models, pivot: pivot, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested, pivotDB: pivotDatabase)
+            try performManualLoad(type, models: &models, pivot: (pivot.table, pivot.parentKey, pivot.relatedKey), relation: relation, relationName: relationName, parentIds: parentIds, nested: nested, pivotDB: pivotDB)
         }
     }
 
