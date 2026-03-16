@@ -254,7 +254,7 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
         let finalKey = self.key.isEmpty ? "model" : self.key
         
         let parentKey = "\(parentTable.singularized)_id"
-        let relatedKey = "\(Related.tableName.singularized)_id"
+        let relatedKey = "\(finalKey)_id"
         
         return (table: table, parentKey: parentKey, relatedKey: relatedKey)
     }
