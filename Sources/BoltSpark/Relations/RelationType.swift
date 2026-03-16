@@ -23,7 +23,11 @@ public final class HasMany<Related: Model>: BoltRelation, Codable {
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.wrappedValue = (try? container.decode([Related].self)) ?? []
+        self.key = ""
+    }
     public func encode(to encoder: Encoder) throws {}
 }
 
@@ -73,17 +77,19 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
     public var key: String
     public var foreignKey: String?
     public var relatedKey: String?
-    
+    public var pivotDatabase: String?
+
     public var relatedModelType: any Model.Type { Related.self }
 
-    public init(wrappedValue: [Related] = [], pivotTable: String = "", foreignKey: String? = nil, relatedKey: String? = nil) {
+    public init(wrappedValue: [Related] = [], pivotTable: String = "", foreignKey: String? = nil, relatedKey: String? = nil, pivotDatabase: String? = nil) {
         self.wrappedValue = wrappedValue
         self.key = pivotTable
         self.foreignKey = foreignKey
         self.relatedKey = relatedKey
+        self.pivotDatabase = pivotDatabase
     }
 
-    public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
+    public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String, database: String)? {
         let actualTable: String
         if !key.isEmpty {
             actualTable = key
@@ -95,20 +101,23 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         
         let pk = foreignKey ?? "\(parentTable.singularized)_id"
         let rk = relatedKey ?? "\(Related.tableName.singularized)_id"
+        let db = pivotDatabase ?? actualTable
         
-        return (table: actualTable, parentKey: pk, relatedKey: rk)
+        return (table: actualTable, parentKey: pk, relatedKey: rk, database: db)
     }
     
     public func guessKey(parentTable: String) -> String { return "id" }
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
     
     public init(from decoder: Decoder) throws {
-        self.wrappedValue = []
+        let container = try decoder.singleValueContainer()
+        self.wrappedValue = (try? container.decode([Related].self)) ?? []
         self.key = ""
-        self.foreignKey = nil
-        self.relatedKey = nil
     }
-    public func encode(to encoder: Encoder) throws {}
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
 }
 
 @propertyWrapper
@@ -167,7 +176,8 @@ public final class MorphMany<Related: Model>: BoltRelation, Codable {
 
     public func extraConditions(parentTable: String) -> [String: String] {
         let finalKey = key.isEmpty ? "model" : key
-        return ["\(finalKey)_type": "LIKE %\(parentTable.singularized.capitalized)%"]
+        let targetType = String(describing: Related.self)   
+        return ["\(finalKey)_type": "LIKE %\(targetType)%"]
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
@@ -248,7 +258,8 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     public func guessKey(parentTable: String) -> String { return "id" }
     public func extraConditions(parentTable: String) -> [String: String] {
         let finalKey = self.key.isEmpty ? "model" : self.key
-        return ["\(finalKey)_type": "LIKE %\(parentTable.singularized.capitalized)%"]
+        let targetType = String(describing: Related.self)
+        return ["\(finalKey)_type": "LIKE %\(targetType)%"]
     }
 
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String, database: String)? {

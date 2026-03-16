@@ -392,27 +392,38 @@ extension QueryBuilder {
         try mapAndDistribute(rawData: rawData, models: &models, relationName: relationName, type: M.self, pivotKey: "pivot_parent_id", nested: nested)
     }
     
-    private func performManualLoad<M: Model>(_ type: M.Type, models: inout [T], pivot: (table: String, parentKey: String, relatedKey: String), relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String], pivotDB: String) throws {
+    private func performManualLoad<M: Model>(
+        _ type: M.Type,
+        models: inout [T],
+        pivot: (table: String, parentKey: String, relatedKey: String),
+        relation: BoltRelation,
+        relationName: String,
+        parentIds: [Int64],
+        nested: [String],
+        pivotDB: String
+    ) throws {
         let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
         var pivotSql = "SELECT * FROM `\(pivot.table)` WHERE `\(pivot.parentKey)` IN (\(placeholders))"
         var pivotArgs: [Any] = parentIds
         
         for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-            let op = val.hasPrefix("LIKE ") ? "LIKE" : "="
-            pivotSql += " AND `\(col)` \(op) ?"
+            pivotSql += " AND `\(col)` LIKE ?"
             pivotArgs.append(val.replacingOccurrences(of: "LIKE ", with: ""))
         }
         
         let pivotDriver = try BoltSpark.driver(for: pivotDB)
         let pivotRows = try pivotDriver.fetch(pivotSql, arguments: pivotArgs)
+        
         if pivotRows.isEmpty { return }
 
-        let relatedIds = Array(Set(pivotRows.compactMap { ($0[pivot.relatedKey] as? Int64) ?? ($0[pivot.relatedKey] as? Int).map { Int64($0) } }))
-        let relatedPlaceholders = String(repeating: "?,", count: relatedIds.count).dropLast()
-        let relatedSql = "SELECT * FROM `\(M.tableName)` WHERE id IN (\(relatedPlaceholders))"
+        let relatedIds = Array(Set(pivotRows.compactMap {
+            ($0[pivot.relatedKey] as? Int64) ?? ($0[pivot.relatedKey] as? Int).map { Int64($0) }
+        }))
         
+        let relatedSql = "SELECT * FROM `\(M.tableName)` WHERE id IN (\(String(repeating: "?,", count: relatedIds.count).dropLast()))"
         let modelDriver = try BoltSpark.driver(for: M.databaseName)
         let modelRows = try modelDriver.fetch(relatedSql, arguments: relatedIds)
+        
         let allRelatedModels = try ModelMapper.map(modelRows, to: M.self)
 
         try distributeManualResults(pivotRows: pivotRows, allRelatedModels: allRelatedModels, models: &models, relationName: relationName, pivotParentKey: pivot.parentKey, pivotRelatedKey: pivot.relatedKey, nested: nested)
