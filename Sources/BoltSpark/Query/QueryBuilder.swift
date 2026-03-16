@@ -427,6 +427,11 @@ extension QueryBuilder {
         let allRelatedModels = try ModelMapper.map(modelRows, to: M.self)
 
         try distributeManualResults(pivotRows: pivotRows, allRelatedModels: allRelatedModels, models: &models, relationName: relationName, pivotParentKey: pivot.parentKey, pivotRelatedKey: pivot.relatedKey, nested: nested)
+        
+        #if DEBUG
+        print("🛠️ BoltSpark DEBUG: Looking for pivot table [\(pivot.table)] in database [\(pivotDB)]")
+        print("🛠️ BoltSpark SQL: \(pivotSql) with Args: \(pivotArgs)")
+        #endif
     }
     
     private func eagerLoadNested(models: inout [any Model], type: any Model.Type, relations: [String]) throws {
