@@ -247,7 +247,8 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
 
     public func guessKey(parentTable: String) -> String { return "id" }
     public func extraConditions(parentTable: String) -> [String: String] {
-        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
+        let finalKey = self.key.isEmpty ? "model" : self.key
+        return ["\(finalKey)_type": "LIKE %\(parentTable.singularized.capitalized)%"]
     }
 
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String, database: String)? {
