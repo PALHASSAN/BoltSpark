@@ -159,16 +159,28 @@ public final class MorphMany<Related: Model>: BoltRelation, Codable {
         self.wrappedValue = wrappedValue
         self.key = name
     }
+    
     public func guessKey(parentTable: String) -> String {
-        return "\(key)_id"
+        let finalKey = key.isEmpty ? "model" : key
+        return "\(finalKey)_id"
     }
+
     public func extraConditions(parentTable: String) -> [String: String] {
-        return ["\(key)_type": "LIKE %\(parentTable.singularized.capitalized)"]
+        let finalKey = key.isEmpty ? "model" : key
+        return ["\(finalKey)_type": "LIKE %\(parentTable.singularized.capitalized)%"]
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
-    public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
-    public func encode(to encoder: Encoder) throws {}
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.wrappedValue = (try? container.decode([Related].self)) ?? []
+        self.key = ""
+    }
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
 }
 
 @propertyWrapper
@@ -190,7 +202,10 @@ public final class MorphOne<Related: Model>: BoltRelation, Codable {
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
     public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
-    public func encode(to encoder: Encoder) throws {}
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
 }
 
 @propertyWrapper
@@ -210,7 +225,10 @@ public final class MorphTo<Related: Model>: BoltRelation, Codable {
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
     public init(from decoder: Decoder) throws { self.wrappedValue = nil; self.key = "" }
-    public func encode(to encoder: Encoder) throws {}
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
 }
 
 @propertyWrapper
@@ -232,9 +250,13 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     }
 
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
+        let table = self.pivotTable.isEmpty ? "\(parentTable.singularized)_links" : self.pivotTable
+        let finalKey = self.key.isEmpty ? "model" : self.key
+        
         let parentKey = "\(parentTable.singularized)_id"
-        let relatedKey = "\(key)_id"
-        return (table: pivotTable, parentKey: parentKey, relatedKey: relatedKey)
+        let relatedKey = "\(Related.tableName.singularized)_id"
+        
+        return (table: table, parentKey: parentKey, relatedKey: relatedKey)
     }
 
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
@@ -244,7 +266,10 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
         self.key = ""
         self.pivotTable = ""
     }
-    public func encode(to encoder: Encoder) throws {}
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
 }
 
 @propertyWrapper
@@ -268,8 +293,10 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     }
     
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String)? {
-        let table = self.pivotTable ?? "\(Related.tableName.singularized)_links"
-        let parentKey = "\(key)_id"
+        let table = self.pivotTable ?? "\(Related.tableName.singularized)ables"
+        let finalKey = self.key.isEmpty ? "model" : self.key
+        
+        let parentKey = "\(finalKey)_id"
         let relatedKey = "\(Related.tableName.singularized)_id"
                 
         return (table: table, parentKey: parentKey, relatedKey: relatedKey)
@@ -277,5 +304,8 @@ public final class MorphedByMany<Related: Model>: BoltRelation, Codable {
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
     public init(from decoder: Decoder) throws { self.wrappedValue = []; self.key = "" }
-    public func encode(to encoder: Encoder) throws {}
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(wrappedValue)
+    }
 }
