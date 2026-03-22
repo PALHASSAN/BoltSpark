@@ -14,7 +14,7 @@ public final class HasMany<Related: Model>: BoltRelation, Codable {
     public var relatedModelType: any Model.Type { Related.self }
     
     public func guessKey(parentTable: String) -> String {
-        return key.isEmpty ? "\(parentTable.singularized)_id" : key
+        return key.isEmpty ? "\(parentTable.singularized.toSnakeCase())_id" : key
     }
     
     public init(wrappedValue: [Related] = [], key: String = "") {
@@ -43,7 +43,7 @@ public final class HasOne<Related: Model>: BoltRelation, Codable {
     }
     
     public func guessKey(parentTable: String) -> String {
-        return key.isEmpty ? "\(parentTable.singularized)_id" : key
+        return key.isEmpty ? "\(parentTable.singularized.toSnakeCase())_id" : key
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = data as? Related }
@@ -94,13 +94,13 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         if !key.isEmpty {
             actualTable = key
         } else {
-            let p = parentTable.singularized
-            let r = Related.tableName.singularized
+            let p = parentTable.singularized.toSnakeCase()
+            let r = Related.tableName.singularized.toSnakeCase()
             actualTable = [p, r].sorted().joined(separator: "_")
         }
         
-        let pk = foreignKey ?? "\(parentTable.singularized)_id"
-        let rk = relatedKey ?? "\(Related.tableName.singularized)_id"
+        let pk = foreignKey ?? "\(parentTable.singularized.toSnakeCase())_id"
+        let rk = relatedKey ?? "\(Related.tableName.singularized.toSnakeCase())_id"
         let db = pivotDatabase ?? actualTable
         
         return (table: actualTable, parentKey: pk, relatedKey: rk, database: db)
@@ -131,7 +131,7 @@ public final class HasManyThrough<Related: Model>: BoltRelation, Codable {
     }
     
     public func guessKey(parentTable: String) -> String {
-        return key.isEmpty ? "\(parentTable.singularized)_id" : key
+        return key.isEmpty ? "\(parentTable.singularized.toSnakeCase())_id" : key
     }
     
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
@@ -164,19 +164,19 @@ public final class MorphMany<Related: Model>: BoltRelation, Codable {
     public var key: String
     public var relatedModelType: any Model.Type { Related.self }
     
-    public init(wrappedValue: [Related] = [], _ name: String) {
+    public init(wrappedValue: [Related] = [], _ name: String = "") {
         self.wrappedValue = wrappedValue
         self.key = name
     }
     
     public func guessKey(parentTable: String) -> String {
-        let finalKey = key.isEmpty ? "model" : key
+        let finalKey = key.isEmpty ? "modelable" : key.toSnakeCase()
         return "\(finalKey)_id"
     }
 
     public func extraConditions(parentTable: String) -> [String: String] {
-        let finalKey = key.isEmpty ? "model" : key
-        let targetType = String(describing: Related.self)   
+        let finalKey = key.isEmpty ? "modelable" : key.toSnakeCase()
+        let targetType = parentTable.singularized.capitalized
         return ["\(finalKey)_type": "LIKE %\(targetType)%"]
     }
     
