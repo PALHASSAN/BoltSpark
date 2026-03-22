@@ -279,15 +279,7 @@ extension QueryBuilder {
     }
     
     private func buildHasCondition(relationName: String, isExists: Bool, subQuerySql: String? = nil, subQueryArgs: [Any] = []) -> Self {
-        let dummyData = "{}".data(using: .utf8)!
-        let dummyInstance = try? JSONDecoder().decode(T.self, from: dummyData)
-        let mirror = Mirror(reflecting: dummyInstance ?? T.self)
-        
-        // Search for the relation by matching the label (ignoring the '_' prefix added by Swift)
-        guard let child = mirror.children.first(where: {
-            let label = $0.label?.replacingOccurrences(of: "_", with: "")
-            return label == relationName
-        }), let relation = child.value as? BoltRelation else {
+        guard let relation = BoltReflector.getRelation(from: T.self, named: relationName) else {
 #if DEBUG
             print("⚠️ BoltSpark: Relation '\(relationName)' not found in model \(T.self)")
 #endif
@@ -295,30 +287,17 @@ extension QueryBuilder {
         }
         
         let relatedTable = relation.relatedModelType.tableName
-        let existsKeyword = isExists ? "EXISTS" : "NOT EXISTS"
+        let existsKw = isExists ? "EXISTS" : "NOT EXISTS"
         var sql = ""
         
-        // Handle Many-to-Many vs One-to-Many logic
         if let pivot = relation.pivotConfig(parentTable: T.tableName) {
-            sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) INNER JOIN \(pivot.table) ON \(relatedTable).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) = \(T.tableName).id"
+            sql = "\(existsKw) (SELECT 1 FROM \(relatedTable) INNER JOIN \(pivot.table) ON \(relatedTable).id = \(pivot.table).\(pivot.relatedKey) WHERE \(pivot.table).\(pivot.parentKey) = \(T.tableName).id"
+            buildExtraConditions(for: relation, in: pivot.table, appendingTo: &sql)
             
-            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                if val.hasPrefix("LIKE ") {
-                    sql += " AND \(pivot.table).\(col) LIKE ?"
-                    self.arguments.append(val.replacingOccurrences(of: "LIKE ", with: ""))
-                } else {
-                    sql += " AND \(pivot.table).\(col) = ?"
-                    self.arguments.append(val)
-                }
-            }
         } else {
             let foreignKey = relation.guessKey(parentTable: T.tableName)
-            sql = "\(existsKeyword) (SELECT 1 FROM \(relatedTable) WHERE \(relatedTable).\(foreignKey) = \(T.tableName).id"
-            
-            for (col, val) in relation.extraConditions(parentTable: T.tableName) {
-                sql += " AND \(relatedTable).\(col) = ?"
-                self.arguments.append(val)
-            }
+            sql = "\(existsKw) (SELECT 1 FROM \(relatedTable) WHERE \(relatedTable).\(foreignKey) = \(T.tableName).id"
+            buildExtraConditions(for: relation, in: relatedTable, appendingTo: &sql)
         }
         
         if let subSql = subQuerySql, !subSql.isEmpty {
@@ -326,10 +305,20 @@ extension QueryBuilder {
             self.arguments.append(contentsOf: subQueryArgs)
         }
         
-        sql += ")"
-        self.wheres.append((sql, "AND"))
-        
+        self.wheres.append((sql + ")", "AND"))
         return self
+    }
+    
+    private func buildExtraConditions(for relation: BoltRelation, in table: String, appendingTo sql: inout String) {
+        for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+            if val.hasPrefix("LIKE ") {
+                sql += " AND \(table).\(col) LIKE ?"
+                self.arguments.append(val.replacingOccurrences(of: "LIKE ", with: ""))
+            } else {
+                sql += " AND \(table).\(col) = ?"
+                self.arguments.append(val)
+            }
+        }
     }
     
     public func buildConditionsOnly() -> (sql: String, arguments: [Any]) {
