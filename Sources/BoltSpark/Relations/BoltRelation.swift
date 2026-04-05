@@ -17,9 +17,12 @@ public protocol BoltRelation {
     func extraConditions(parentTable: String) -> [String: String]
     
     func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String, database: String)?
+    
+    func restoreConfig(from original: BoltRelation)
 }
 
 extension BoltRelation {
     public func extraConditions(parentTable: String) -> [String: String] { return [:] }
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String, database: String)? { nil }
+    public func restoreConfig(from original: BoltRelation) {}
 }

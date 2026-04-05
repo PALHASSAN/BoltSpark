@@ -17,7 +17,8 @@ extension String {
             "men": "man",
             "women": "woman",
             "teeth": "tooth",
-            "feet": "foot"
+            "feet": "foot",
+            "type": "types"
         ]
         
         if let irregular = irregulars[lower] {
@@ -29,7 +30,14 @@ extension String {
         }
         
         if lower.hasSuffix("es") && !lower.hasSuffix("ees") {
-            return String(self.dropLast(2))
+            let vowels = ["a", "e", "i", "o", "u"]
+            let prefix = String(lower.dropLast(2))
+            
+            if prefix.hasSuffix("s") || prefix.hasSuffix("x") || prefix.hasSuffix("z") || prefix.hasSuffix("ch") || prefix.hasSuffix("sh") {
+                return prefix
+            }
+            
+            return String(self.dropLast())
         }
         
         if lower.hasSuffix("s") {

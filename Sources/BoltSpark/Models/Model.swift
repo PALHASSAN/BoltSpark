@@ -8,6 +8,8 @@
 import Foundation
 
 public protocol Model: Codable {
+    init()
+    
     static var tableName: String { get }
     static var databaseName: String { get }
     static var isSoftDeletable: Bool { get }

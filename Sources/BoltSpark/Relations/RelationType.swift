@@ -94,9 +94,9 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         if !key.isEmpty {
             actualTable = key
         } else {
-            let p = parentTable.singularized.toSnakeCase()
-            let r = Related.tableName.singularized.toSnakeCase()
-            actualTable = [p, r].sorted().joined(separator: "_")
+            let pTable = parentTable.singularized.toSnakeCase()
+            let rTable = Related.tableName.singularized.toSnakeCase()
+            actualTable = [pTable, rTable].sorted().joined(separator: "_")
         }
         
         let pk = foreignKey ?? "\(parentTable.singularized.toSnakeCase())_id"
@@ -104,6 +104,15 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         let db = pivotDatabase ?? actualTable
         
         return (table: actualTable, parentKey: pk, relatedKey: rk, database: db)
+    }
+    
+    public func restoreConfig(from original: BoltRelation) {
+        guard let originalRelation = original as? BelongsToMany<Related> else { return }
+        
+        self.key = originalRelation.key
+        self.foreignKey = originalRelation.foreignKey
+        self.relatedKey = originalRelation.relatedKey
+        self.pivotDatabase = originalRelation.pivotDatabase
     }
     
     public func guessKey(parentTable: String) -> String { return "id" }
