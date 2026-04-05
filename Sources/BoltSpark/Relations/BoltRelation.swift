@@ -7,7 +7,7 @@
 
 import Foundation
 
-public protocol BoltRelation {
+public protocol BoltRelation: AnyObject {
     var key: String { get set }
     
     var relatedModelType: any Model.Type { get }
