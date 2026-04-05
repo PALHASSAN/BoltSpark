@@ -9,8 +9,8 @@ import Foundation
 
 public struct BoltReflector {
     public static func getRelation<T: Model>(from model: T.Type, named relationName: String) -> BoltRelation? {
-        let dummyInstance = try? T(from: BoltMockDecoder())
-        let mirror = Mirror(reflecting: dummyInstance ?? T.self)
+        let dummyInstance = T()
+        let mirror = Mirror(reflecting: dummyInstance)
         
         let child = mirror.children.first {
             $0.label?.replacingOccurrences(of: "_", with: "") == relationName
