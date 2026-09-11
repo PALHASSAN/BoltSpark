@@ -332,13 +332,16 @@ extension QueryBuilder {
 }
 
 // MARK: Performance
+// MARK: Performance & Eager Loading
 extension QueryBuilder {
     internal func performEagerLoading(on models: inout [T]) throws {
-        guard let firstModel = models.first else { return }
+        guard !models.isEmpty else { return }
         let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
 
-        let templateMirror = Mirror(reflecting: firstModel)
+        // استخدام نموذج خام لاستخراج إعدادات الـ Property Wrapper الأصلية بدقة
+        let prototypeModel = T()
+        let prototypeMirror = Mirror(reflecting: prototypeModel)
 
         var groupedRelations: [String: [String]] = [:]
         for path in eagerLoads {
@@ -350,35 +353,94 @@ extension QueryBuilder {
         }
 
         for (relationName, nestedPaths) in groupedRelations {
-            guard let child = templateMirror.children.first(where: {
+            // البحث عن العلاقة في النموذج النموذجي والنموذج الفعلي
+            guard let protoChild = prototypeMirror.children.first(where: {
                 $0.label?.replacingOccurrences(of: "_", with: "") == relationName
-            }), let relation = child.value as? BoltRelation else { continue }
+            }), let protoRelation = protoChild.value as? BoltRelation else {
+                continue
+            }
 
-            try openAndLoad(relation.relatedModelType, models: &models, relation: relation, relationName: relationName, parentIds: parentIds, nested: nestedPaths)
+            try dispatchRelationLoad(
+                protoRelation.relatedModelType,
+                models: &models,
+                relation: protoRelation,
+                relationName: relationName,
+                parentIds: parentIds,
+                nested: nestedPaths
+            )
         }
     }
 
-    private func openAndLoad<M: Model>(_ type: M.Type, models: inout [T], relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
-        guard let pivot = relation.pivotConfig(parentTable: T.tableName) else { return }
-        
-        let pivotDB = pivot.database
-        let isSingleDatabase = (M.databaseName == pivotDB)
-
-        if isSingleDatabase {
-            try performJoinLoad(type, models: &models, pivot: (pivot.table, pivot.parentKey, pivot.relatedKey), relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
+    private func dispatchRelationLoad<M: Model>(
+        _ type: M.Type,
+        models: inout [T],
+        relation: BoltRelation,
+        relationName: String,
+        parentIds: [Int64],
+        nested: [String]
+    ) throws {
+        // فحص ما إذا كانت العلاقة Many-to-Many أو MorphToMany (تعتمد Pivot)
+        if let rawPivot = relation.pivotConfig(parentTable: T.tableName) {
+            // إذا لم تُحدد قاعدة بيانات الـ pivot، نعتمد نفس قاعدة بيانات الموديل الأساسي T
+            let pivotDB = (rawPivot.database == rawPivot.table) ? T.databaseName : rawPivot.database
+            let pivot = (table: rawPivot.table, parentKey: rawPivot.parentKey, relatedKey: rawPivot.relatedKey)
+            
+            let isSingleDatabase = (M.databaseName == pivotDB)
+            if isSingleDatabase {
+                try performJoinLoad(type, models: &models, pivot: pivot, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
+            } else {
+                try performManualLoad(type, models: &models, pivot: pivot, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested, pivotDB: pivotDB)
+            }
         } else {
-            try performManualLoad(type, models: &models, pivot: (pivot.table, pivot.parentKey, pivot.relatedKey), relation: relation, relationName: relationName, parentIds: parentIds, nested: nested, pivotDB: pivotDB)
+            // العلاقات العادية (HasMany / HasOne)
+            try performStandardRelationLoad(type, models: &models, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
         }
     }
 
-    private func performJoinLoad<M: Model>(_ type: M.Type, models: inout [T], pivot: (table: String, parentKey: String, relatedKey: String), relation: BoltRelation, relationName: String, parentIds: [Int64], nested: [String]) throws {
+    // MARK: - Direct HasMany / HasOne Loading
+    private func performStandardRelationLoad<M: Model>(
+        _ type: M.Type,
+        models: inout [T],
+        relation: BoltRelation,
+        relationName: String,
+        parentIds: [Int64],
+        nested: [String]
+    ) throws {
+        let foreignKey = relation.guessKey(parentTable: T.tableName)
+        let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
+        
+        var sql = "SELECT * FROM `\(M.tableName)` WHERE `\(foreignKey)` IN (\(placeholders))"
+        var args: [Any] = parentIds
+
+        for (col, val) in relation.extraConditions(parentTable: T.tableName) {
+            let op = val.hasPrefix("LIKE ") ? "LIKE" : "="
+            sql += " AND `\(col)` \(op) ?"
+            args.append(val.replacingOccurrences(of: "LIKE ", with: ""))
+        }
+
+        let driver = try BoltSpark.driver(for: M.databaseName)
+        let rawData = try driver.fetch(sql, arguments: args)
+        
+        try mapAndDistribute(rawData: rawData, models: &models, relationName: relationName, type: M.self, pivotKey: foreignKey, nested: nested)
+    }
+
+    // MARK: - Pivot Loading (Many-to-Many)
+    private func performJoinLoad<M: Model>(
+        _ type: M.Type,
+        models: inout [T],
+        pivot: (table: String, parentKey: String, relatedKey: String),
+        relation: BoltRelation,
+        relationName: String,
+        parentIds: [Int64],
+        nested: [String]
+    ) throws {
         let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
         var args: [Any] = parentIds
-        
+
         var sql = "SELECT `\(M.tableName)`.*, `\(pivot.table)`.`\(pivot.parentKey)` AS pivot_parent_id " +
                   "FROM `\(M.tableName)` INNER JOIN `\(pivot.table)` ON `\(M.tableName)`.id = `\(pivot.table)`.`\(pivot.relatedKey)` " +
                   "WHERE `\(pivot.table)`.`\(pivot.parentKey)` IN (\(placeholders))"
-        
+
         for (col, val) in relation.extraConditions(parentTable: T.tableName) {
             let op = val.hasPrefix("LIKE ") ? "LIKE" : "="
             sql += " AND `\(pivot.table)`.`\(col)` \(op) ?"
@@ -387,10 +449,10 @@ extension QueryBuilder {
 
         let driver = try BoltSpark.driver(for: M.databaseName)
         let rawData = try driver.fetch(sql, arguments: args)
-        
+
         try mapAndDistribute(rawData: rawData, models: &models, relationName: relationName, type: M.self, pivotKey: "pivot_parent_id", nested: nested)
     }
-    
+
     private func performManualLoad<M: Model>(
         _ type: M.Type,
         models: inout [T],
@@ -404,102 +466,131 @@ extension QueryBuilder {
         let placeholders = String(repeating: "?,", count: parentIds.count).dropLast()
         var pivotSql = "SELECT * FROM `\(pivot.table)` WHERE `\(pivot.parentKey)` IN (\(placeholders))"
         var pivotArgs: [Any] = parentIds
-        
+
         for (col, val) in relation.extraConditions(parentTable: T.tableName) {
             pivotSql += " AND `\(col)` LIKE ?"
             pivotArgs.append(val.replacingOccurrences(of: "LIKE ", with: ""))
         }
-        
+
         let pivotDriver = try BoltSpark.driver(for: pivotDB)
         let pivotRows = try pivotDriver.fetch(pivotSql, arguments: pivotArgs)
-        
+
         if pivotRows.isEmpty { return }
 
         let relatedIds = Array(Set(pivotRows.compactMap {
             ($0[pivot.relatedKey] as? Int64) ?? ($0[pivot.relatedKey] as? Int).map { Int64($0) }
         }))
-        
-        let relatedSql = "SELECT * FROM `\(M.tableName)` WHERE id IN (\(String(repeating: "?,", count: relatedIds.count).dropLast()))"
+
+        if relatedIds.isEmpty { return }
+
+        let relatedPlaceholders = String(repeating: "?,", count: relatedIds.count).dropLast()
+        let relatedSql = "SELECT * FROM `\(M.tableName)` WHERE id IN (\(relatedPlaceholders))"
         let modelDriver = try BoltSpark.driver(for: M.databaseName)
         let modelRows = try modelDriver.fetch(relatedSql, arguments: relatedIds)
-        
+
         let allRelatedModels = try ModelMapper.map(modelRows, to: M.self)
 
-        try distributeManualResults(pivotRows: pivotRows, allRelatedModels: allRelatedModels, models: &models, relationName: relationName, pivotParentKey: pivot.parentKey, pivotRelatedKey: pivot.relatedKey, nested: nested)
-        
-        #if DEBUG
-        print("🛠️ BoltSpark DEBUG: Looking for pivot table [\(pivot.table)] in database [\(pivotDB)]")
-        print("🛠️ BoltSpark SQL: \(pivotSql) with Args: \(pivotArgs)")
-        #endif
+        try distributeManualResults(
+            pivotRows: pivotRows,
+            allRelatedModels: allRelatedModels,
+            models: &models,
+            relationName: relationName,
+            pivotParentKey: pivot.parentKey,
+            pivotRelatedKey: pivot.relatedKey,
+            nested: nested
+        )
     }
-    
+
     private func eagerLoadNested(models: inout [any Model], type: any Model.Type, relations: [String]) throws {
         func openAndLoadInner<M: Model>(_ type: M.Type, models: inout [any Model], relations: [String]) throws {
             var typedModels = models.compactMap { $0 as? M }
             if typedModels.isEmpty { return }
-            
+
             let builder = QueryBuilder<M>()
             builder.with(relations)
             try builder.performEagerLoading(on: &typedModels)
-            
+
             models = typedModels
         }
         try openAndLoadInner(type, models: &models, relations: relations)
     }
 
-    // MARK: - Unified Distribution Helpers
-    private func mapAndDistribute<M: Model>(rawData: [[String: Any]], models: inout [T], relationName: String, type: M.Type, pivotKey: String, nested: [String]) throws {
+    // MARK: - Distribution Helpers
+    private func mapAndDistribute<M: Model>(
+        rawData: [[String: Any]],
+        models: inout [T],
+        relationName: String,
+        type: M.Type,
+        pivotKey: String,
+        nested: [String]
+    ) throws {
         guard let firstModel = models.first else { return }
-        let relationLabel = Mirror(reflecting: firstModel).children.first { $0.label?.replacingOccurrences(of: "_", with: "") == relationName }?.label
+        let relationLabel = Mirror(reflecting: firstModel).children.first {
+            $0.label?.replacingOccurrences(of: "_", with: "") == relationName
+        }?.label
 
         for i in 0..<models.count {
             let pid = models[i].idValue
             let mirror = Mirror(reflecting: models[i])
-            
-            if let label = relationLabel, let child = mirror.children.first(where: { $0.label == label }),
+
+            if let label = relationLabel,
+               let child = mirror.children.first(where: { $0.label == label }),
                let modelRel = child.value as? BoltRelation {
-                
+
                 let filteredRaw = rawData.filter { row in
                     let dbId = (row[pivotKey] as? Int64) ?? (row[pivotKey] as? Int).map { Int64($0) }
                     return dbId == pid
                 }
                 var mapped = try ModelMapper.map(filteredRaw, to: M.self)
-                
+
                 if !nested.isEmpty && !mapped.isEmpty {
                     var erased = mapped as [any Model]
                     try eagerLoadNested(models: &erased, type: M.self, relations: nested)
                     mapped = erased.compactMap { $0 as? M }
                 }
-                
+
                 modelRel.setRelationData(mapped)
             }
         }
     }
 
-    private func distributeManualResults<M: Model>(pivotRows: [[String: Any]], allRelatedModels: [M], models: inout [T], relationName: String, pivotParentKey: String, pivotRelatedKey: String, nested: [String]) throws {
+    private func distributeManualResults<M: Model>(
+        pivotRows: [[String: Any]],
+        allRelatedModels: [M],
+        models: inout [T],
+        relationName: String,
+        pivotParentKey: String,
+        pivotRelatedKey: String,
+        nested: [String]
+    ) throws {
         guard let firstModel = models.first else { return }
-        let relationLabel = Mirror(reflecting: firstModel).children.first { $0.label?.replacingOccurrences(of: "_", with: "") == relationName }?.label
+        let relationLabel = Mirror(reflecting: firstModel).children.first {
+            $0.label?.replacingOccurrences(of: "_", with: "") == relationName
+        }?.label
 
         for i in 0..<models.count {
             let pid = models[i].idValue
             let mirror = Mirror(reflecting: models[i])
-            
-            if let label = relationLabel, let child = mirror.children.first(where: { $0.label == label }),
+
+            if let label = relationLabel,
+               let child = mirror.children.first(where: { $0.label == label }),
                let modelRel = child.value as? BoltRelation {
-                
+
                 let myRelatedIds = pivotRows.filter { row in
                     let dbId = (row[pivotParentKey] as? Int64) ?? (row[pivotParentKey] as? Int).map { Int64($0) }
                     return dbId == pid
-                }.compactMap { ($0[pivotRelatedKey] as? Int64) ?? ($0[pivotRelatedKey] as? Int).map { Int64($0) } }
-                
+                }.compactMap {
+                    ($0[pivotRelatedKey] as? Int64) ?? ($0[pivotRelatedKey] as? Int).map { Int64($0) }
+                }
+
                 var myModels = allRelatedModels.filter { myRelatedIds.contains($0.idValue ?? -1) }
-                
+
                 if !nested.isEmpty && !myModels.isEmpty {
                     var erased = myModels as [any Model]
                     try eagerLoadNested(models: &erased, type: M.self, relations: nested)
                     myModels = erased.compactMap { $0 as? M }
                 }
-                
+
                 modelRel.setRelationData(myModels)
             }
         }

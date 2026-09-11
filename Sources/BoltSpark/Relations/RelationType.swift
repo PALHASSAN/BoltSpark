@@ -73,15 +73,21 @@ public final class BelongsTo<Related: Model>: BoltRelation, Codable {
 
 @propertyWrapper
 public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
-    public var wrappedValue: [Related]
-    public var key: String
+    public var wrappedValue: [Related] = []
+    public var key: String = ""
     public var foreignKey: String?
     public var relatedKey: String?
     public var pivotDatabase: String?
 
     public var relatedModelType: any Model.Type { Related.self }
 
-    public init(wrappedValue: [Related] = [], pivotTable: String = "", foreignKey: String? = nil, relatedKey: String? = nil, pivotDatabase: String? = nil) {
+    public init(
+        wrappedValue: [Related] = [],
+        pivotTable: String = "",
+        foreignKey: String? = nil,
+        relatedKey: String? = nil,
+        pivotDatabase: String? = nil
+    ) {
         self.wrappedValue = wrappedValue
         self.key = pivotTable
         self.foreignKey = foreignKey
@@ -94,16 +100,16 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         if !key.isEmpty {
             actualTable = key
         } else {
-            let pTable = parentTable.singularized.toSnakeCase()
-            let rTable = Related.tableName.singularized.toSnakeCase()
-            actualTable = [pTable, rTable].sorted().joined(separator: "_")
+            let parentTable = parentTable.singularized.toSnakeCase()
+            let relatedTable = Related.tableName.singularized.toSnakeCase()
+            actualTable = [parentTable, relatedTable].sorted().joined(separator: "_")
         }
         
-        let pk = foreignKey ?? "\(parentTable.singularized.toSnakeCase())_id"
-        let rk = relatedKey ?? "\(Related.tableName.singularized.toSnakeCase())_id"
+        let parentKey = (foreignKey != nil && !foreignKey!.isEmpty) ? foreignKey! : "\(parentTable.singularized.toSnakeCase())_id"
+        let relatedkey = (relatedKey != nil && !relatedKey!.isEmpty) ? relatedKey! : "\(Related.tableName.singularized.toSnakeCase())_id"
         let db = pivotDatabase ?? actualTable
         
-        return (table: actualTable, parentKey: pk, relatedKey: rk, database: db)
+        return (table: actualTable, parentKey: parentKey, relatedKey: relatedkey, database: db)
     }
     
     public func restoreConfig(from original: BoltRelation) {
@@ -115,14 +121,23 @@ public final class BelongsToMany<Related: Model>: BoltRelation, Codable {
         self.pivotDatabase = originalRelation.pivotDatabase
     }
     
-    public func guessKey(parentTable: String) -> String { return "id" }
-    public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
+    public func guessKey(parentTable: String) -> String {
+        return (foreignKey != nil && !foreignKey!.isEmpty) ? foreignKey! : "\(parentTable.singularized.toSnakeCase())_id"
+    }
+    
+    public func setRelationData(_ data: Any) {
+        self.wrappedValue = (data as? [Related]) ?? []
+    }
     
     public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        self.wrappedValue = (try? container.decode([Related].self)) ?? []
+        let container = try? decoder.singleValueContainer()
+        self.wrappedValue = (try? container?.decode([Related].self)) ?? []
         self.key = ""
+        self.foreignKey = nil
+        self.relatedKey = nil
+        self.pivotDatabase = nil
     }
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(wrappedValue)
