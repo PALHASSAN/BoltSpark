@@ -377,7 +377,7 @@ extension QueryBuilder {
         nested: [String]
     ) throws {
         if let rawPivot = relation.pivotConfig(parentTable: T.tableName) {
-            let pivotDB = rawPivot.database
+            let pivotDB = (rawPivot.database == rawPivot.table) ? T.databaseName : rawPivot.database
             let pivot = (table: rawPivot.table, parentKey: rawPivot.parentKey, relatedKey: rawPivot.relatedKey)
             
             let isSingleDatabase = (T.databaseName == pivotDB && M.databaseName == pivotDB)
