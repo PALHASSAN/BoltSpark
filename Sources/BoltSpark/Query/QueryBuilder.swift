@@ -377,7 +377,15 @@ extension QueryBuilder {
         nested: [String]
     ) throws {
         if let rawPivot = relation.pivotConfig(parentTable: T.tableName) {
-            let pivotDB = (rawPivot.database == rawPivot.table) ? T.databaseName : rawPivot.database
+            let pivotDB: String
+            if BoltSpark.isRegistered(rawPivot.database) {
+                pivotDB = rawPivot.database
+            } else if BoltSpark.isRegistered(rawPivot.table) {
+                pivotDB = rawPivot.table
+            } else {
+                pivotDB = T.databaseName
+            }
+            
             let pivot = (table: rawPivot.table, parentKey: rawPivot.parentKey, relatedKey: rawPivot.relatedKey)
             
             let isSingleDatabase = (T.databaseName == pivotDB && M.databaseName == pivotDB)
