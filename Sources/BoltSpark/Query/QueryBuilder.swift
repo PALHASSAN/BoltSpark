@@ -331,7 +331,6 @@ extension QueryBuilder {
     }
 }
 
-// MARK: Performance
 // MARK: Performance & Eager Loading
 extension QueryBuilder {
     internal func performEagerLoading(on models: inout [T]) throws {
@@ -339,7 +338,6 @@ extension QueryBuilder {
         let parentIds = models.compactMap { $0.idValue }
         if parentIds.isEmpty { return }
 
-        // استخدام نموذج خام لاستخراج إعدادات الـ Property Wrapper الأصلية بدقة
         let prototypeModel = T()
         let prototypeMirror = Mirror(reflecting: prototypeModel)
 
@@ -353,7 +351,6 @@ extension QueryBuilder {
         }
 
         for (relationName, nestedPaths) in groupedRelations {
-            // البحث عن العلاقة في النموذج النموذجي والنموذج الفعلي
             guard let protoChild = prototypeMirror.children.first(where: {
                 $0.label?.replacingOccurrences(of: "_", with: "") == relationName
             }), let protoRelation = protoChild.value as? BoltRelation else {
@@ -379,21 +376,17 @@ extension QueryBuilder {
         parentIds: [Int64],
         nested: [String]
     ) throws {
-        // فحص ما إذا كانت العلاقة Many-to-Many أو MorphToMany (تعتمد Pivot)
         if let rawPivot = relation.pivotConfig(parentTable: T.tableName) {
-            // إذا لم تُحدد قاعدة بيانات الـ pivot، نعتمد نفس قاعدة بيانات الموديل الأساسي T
-            let pivotDB = (rawPivot.database == rawPivot.table) ? T.databaseName : rawPivot.database
+            let pivotDB = rawPivot.database
             let pivot = (table: rawPivot.table, parentKey: rawPivot.parentKey, relatedKey: rawPivot.relatedKey)
             
-            let isSingleDatabase = (M.databaseName == pivotDB)
+            let isSingleDatabase = (T.databaseName == pivotDB && M.databaseName == pivotDB)
+            
             if isSingleDatabase {
                 try performJoinLoad(type, models: &models, pivot: pivot, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
             } else {
                 try performManualLoad(type, models: &models, pivot: pivot, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested, pivotDB: pivotDB)
             }
-        } else {
-            // العلاقات العادية (HasMany / HasOne)
-            try performStandardRelationLoad(type, models: &models, relation: relation, relationName: relationName, parentIds: parentIds, nested: nested)
         }
     }
 

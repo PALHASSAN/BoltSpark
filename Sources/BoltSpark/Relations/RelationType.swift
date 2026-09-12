@@ -272,20 +272,27 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
     public var pivotTable: String
     public var relatedModelType: any Model.Type { Related.self }
     public var pivotDatabase: String?
-
-    public init(wrappedValue: [Related] = [], pivotTable: String, name: String) {
+    
+    public init(
+        wrappedValue: [Related] = [],
+        pivotTable: String = "",
+        pivotDatabase: String? = nil,
+        name: String = ""
+    ) {
         self.wrappedValue = wrappedValue
         self.pivotTable = pivotTable
+        self.pivotDatabase = pivotDatabase
         self.key = name
     }
-
+    
     public func guessKey(parentTable: String) -> String { return "id" }
+    
     public func extraConditions(parentTable: String) -> [String: String] {
         let finalKey = self.key.isEmpty ? "model" : self.key
         let targetType = String(describing: Related.self)
         return ["\(finalKey)_type": "LIKE %\(targetType)%"]
     }
-
+    
     public func pivotConfig(parentTable: String) -> (table: String, parentKey: String, relatedKey: String, database: String)? {
         let table = self.pivotTable.isEmpty ? "\(parentTable.singularized)_links" : self.pivotTable
         let finalKey = self.key.isEmpty ? "model" : self.key
@@ -299,14 +306,24 @@ public final class MorphToMany<Related: Model>: BoltRelation, Codable {
             database: database
         )
     }
-
+    
+    public func restoreConfig(from original: BoltRelation) {
+        guard let orig = original as? MorphToMany<Related> else { return }
+        self.key = orig.key
+        self.pivotTable = orig.pivotTable
+        self.pivotDatabase = orig.pivotDatabase
+    }
+    
     public func setRelationData(_ data: Any) { self.wrappedValue = (data as? [Related]) ?? [] }
+    
     public init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        self.wrappedValue = (try? container.decode([Related].self)) ?? []
+        let container = try? decoder.singleValueContainer()
+        self.wrappedValue = (try? container?.decode([Related].self)) ?? []
         self.key = ""
         self.pivotTable = ""
+        self.pivotDatabase = nil
     }
+    
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encode(wrappedValue)

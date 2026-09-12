@@ -21,17 +21,19 @@ public final class BoltSpark: @unchecked Sendable {
     
     private static func autoIgnite() {
         hasAutoIgnited = true
-        let extensions = ["sqlite", "db", "sqlite3"]
+        let extensions = ["sqlite", "db", "sqlite3", ""]
         
         for ext in extensions {
-            if let urls = Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: nil) {
-                for url in urls {
-                    let dbName = url.deletingPathExtension().lastPathComponent
-                    if let driver = try? SQLiteDriver(path: url.path) {
-                        drivers[dbName] = driver
-                        if drivers["main"] == nil {
-                            drivers["main"] = driver
-                        }
+            let urls = ext.isEmpty
+            ? (Bundle.main.urls(forResourcesWithExtension: nil, subdirectory: nil) ?? [])
+            : (Bundle.main.urls(forResourcesWithExtension: ext, subdirectory: nil) ?? [])
+            
+            for url in urls {
+                let dbName = url.deletingPathExtension().lastPathComponent
+                if drivers[dbName] == nil, let driver = try? SQLiteDriver(path: url.path) {
+                    drivers[dbName] = driver
+                    if drivers["main"] == nil {
+                        drivers["main"] = driver
                     }
                 }
             }
